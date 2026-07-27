@@ -104,15 +104,17 @@ export const CONFIG = {
   fog: {
     /** Fog is only a faint atmospheric haze now — the planet's HORIZON hides
      *  distant content (see world.planetRadius), not the fog. */
-    near: 80,
-    far: 190,
+    near: 55,
+    far: 150,
   },
 
   world: {
     /** Radius (m) of the rendered planet. Geometry drops by d²/2R with
      *  distance, so this sets how close the horizon feels: smaller = rounder
-     *  world, earlier reveal as the bee advances. Horizon ≈ √(2·R·eyeHeight). */
-    planetRadius: 400,
+     *  world, earlier reveal as the bee advances. Horizon ≈ √(2·R·eyeHeight):
+     *  at R=180 the horizon sits ~30 m away at cruise height and climbing to
+     *  the ceiling scouts ~100 m — a dramatic "small planet" feel. */
+    planetRadius: 180,
     /** Terrain chunk edge length (m). */
     chunkSize: 32,
     /** Plane subdivisions per chunk (verts = (n+1)^2). */
@@ -139,10 +141,10 @@ export const CONFIG = {
     /** Max compass petals shown at once. */
     maxPetals: 3,
     /** Clusters closer than this are "on screen enough" — no petal (m). */
-    petalMinDist: 35,
+    petalMinDist: 25,
     /** Clusters farther than this are considered hidden below the horizon and
      *  always get a petal, even when dead ahead (m). */
-    petalHorizonDist: 70,
+    petalHorizonDist: 45,
   },
 
   fx: {

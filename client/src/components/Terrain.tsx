@@ -9,6 +9,10 @@ import { curveMaterial } from "../lib/curvature";
 const SIZE = CONFIG.world.chunkSize;
 const SEG = CONFIG.world.chunkSegments;
 const RADIUS = CONFIG.world.chunkRadius;
+/** Max curvature drop across the streamed area — bounds must cover it so the
+ *  frustum culler never drops a chunk that has sunk toward the horizon. */
+const CURVE_PAD =
+  ((RADIUS + 1) * SIZE) ** 2 / (2 * CONFIG.world.planetRadius) + 10;
 
 /**
  * Chunk-streamed heightmap terrain. Chunks are generated ahead of the bee and
@@ -59,7 +63,7 @@ export function Terrain({ sim }: { sim: Sim }) {
     // Curvature shifts vertices down at distance; inflate the bounds so the
     // frustum culler never drops a chunk that is still visible.
     geo.computeBoundingSphere();
-    if (geo.boundingSphere) geo.boundingSphere.radius += 40;
+    if (geo.boundingSphere) geo.boundingSphere.radius += CURVE_PAD;
     const mesh = new THREE.Mesh(geo, material);
     mesh.position.set(ox, 0, oz);
     return mesh;
