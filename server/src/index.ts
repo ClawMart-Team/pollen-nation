@@ -1,7 +1,7 @@
 import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { LevelResponse, ProgressResponse } from "@pollen/shared";
+import { nectarGoalForLevel, type LevelResponse, type ProgressResponse } from "@pollen/shared";
 import { stmts } from "./db";
 import { getLevel, prefetch } from "./levels";
 
@@ -70,7 +70,9 @@ app.get("/api/progress", (req, res) => {
   res.json(progressFor(userId));
 });
 
-// POST /api/level-complete — score, nectar, level stats; returns fresh progress.
+// POST /api/level-complete — a run only counts if it met the level's nectar
+// quota (authoritative here); only then is the result recorded and the next
+// level unlocked. Returns pass/fail, the quota, and fresh progress.
 app.post("/api/level-complete", (req, res) => {
   const userId = asUserId(req.body?.userId);
   const { levelId, levelNum, score, nectar } = req.body ?? {};
@@ -80,8 +82,13 @@ app.post("/api/level-complete", (req, res) => {
   ) {
     return res.status(400).json({ error: "userId, levelId, levelNum, score, nectar required" });
   }
-  stmts.insertResult.run(userId, levelId.slice(0, 64), Math.floor(levelNum), score, nectar, Date.now());
-  res.json({ ok: true, progress: progressFor(userId) });
+  const lvl = Math.floor(levelNum);
+  const nectarGoal = nectarGoalForLevel(lvl);
+  const passed = score >= nectarGoal;
+  if (passed) {
+    stmts.insertResult.run(userId, levelId.slice(0, 64), lvl, score, nectar, Date.now());
+  }
+  res.json({ ok: true, passed, nectarGoal, progress: progressFor(userId) });
 });
 
 // Serve the built client only when running as a normal long-lived process

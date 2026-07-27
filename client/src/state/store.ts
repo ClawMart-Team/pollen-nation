@@ -22,6 +22,10 @@ export interface Summary {
   score: number;
   pollinated: number;
   best: number;
+  /** Nectar quota required to complete the level. */
+  goal: number;
+  /** Whether this run met the quota. */
+  passed: boolean;
 }
 
 interface GameStore {
@@ -121,13 +125,22 @@ export const useGame = create<GameStore>((set, get) => ({
     const { sim, map, levelNum, progress } = get();
     if (!sim || !map) return;
     const score = Math.round(sim.nectar);
+    const goal = sim.nectarGoal;
+    const passed = score >= goal;
     const prevBest = progress?.bestScores?.[levelNum] ?? 0;
     set({
       phase: "summary",
-      summary: { reason, score, pollinated: sim.pollinatedThisRun, best: Math.max(prevBest, score) },
+      summary: {
+        reason,
+        score,
+        pollinated: sim.pollinatedThisRun,
+        best: passed ? Math.max(prevBest, score) : prevBest,
+        goal,
+        passed,
+      },
     });
-    postLevelComplete(map.levelId, levelNum, score, sim.nectar).then((p) => {
-      if (p) set({ progress: p });
+    postLevelComplete(map.levelId, levelNum, score, sim.nectar).then((r) => {
+      if (r?.progress) set({ progress: r.progress });
     });
   },
 

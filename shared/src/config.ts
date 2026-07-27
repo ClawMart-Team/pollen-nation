@@ -155,6 +155,20 @@ export const CONFIG = {
     /** Seconds the bee drifts down after energy hits zero before summary. */
     driftSec: 1.8,
   },
+
+  goal: {
+    /** Nectar quota to complete level 1. */
+    baseQuota: 30,
+    /** Extra nectar quota added per level beyond level 1. */
+    quotaPerLevel: 6,
+  },
 } as const;
 
 export type GameConfig = typeof CONFIG;
+
+/** Minimum nectar required to complete a level. Single source of truth shared
+ *  by the client (HUD/summary) and the server (authoritative unlock gate). */
+export function nectarGoalForLevel(level: number): number {
+  const n = Math.max(1, Math.floor(level));
+  return CONFIG.goal.baseQuota + CONFIG.goal.quotaPerLevel * (n - 1);
+}

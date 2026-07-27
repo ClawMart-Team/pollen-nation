@@ -1,4 +1,4 @@
-import type { LevelResponse, ProgressResponse } from "@pollen/shared";
+import type { LevelResponse, ProgressResponse, LevelCompleteResponse } from "@pollen/shared";
 
 /** Named debug users for the on-page user switcher. Each is an independent
  *  player with their own generated levels and progress. */
@@ -47,15 +47,14 @@ export async function postLevelComplete(
   levelNum: number,
   score: number,
   nectar: number
-): Promise<ProgressResponse | null> {
+): Promise<LevelCompleteResponse | null> {
   try {
     const res = await fetch("/api/level-complete", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ userId: getUserId(), levelId, levelNum, score, nectar }),
     });
-    const data = await json<{ progress: ProgressResponse }>(res);
-    return data.progress;
+    return await json<LevelCompleteResponse>(res);
   } catch {
     return null;
   }

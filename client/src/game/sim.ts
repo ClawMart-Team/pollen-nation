@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { CONFIG, type MapData, type FlowerDef } from "@pollen/shared";
+import { CONFIG, nectarGoalForLevel, type MapData, type FlowerDef } from "@pollen/shared";
 import { makeHeightSampler, type HeightSampler } from "../lib/noise";
 import type { InputState } from "./input";
 
@@ -53,6 +53,8 @@ export interface Sim {
   timeLeft: number;
   dayLength: number;
   nectar: number;
+  /** Minimum nectar required to complete this level. */
+  nectarGoal: number;
   pollinatedThisRun: number;
   perchedFlower: number;
   sipRate: number;
@@ -135,6 +137,7 @@ export function createSim(map: MapData, pollinatedIds: string[]): Sim {
   const hiveY = heightAt(map.hive.x, map.hive.z);
   const dayLength = map.difficulty.dayLengthSec || CONFIG.day.defaultLengthSec;
   const energyMax = map.difficulty.energyBudget || CONFIG.day.defaultEnergy;
+  const nectarGoal = map.difficulty.nectarGoal ?? nectarGoalForLevel(map.difficulty.level);
 
   return {
     map,
@@ -150,6 +153,7 @@ export function createSim(map: MapData, pollinatedIds: string[]): Sim {
     timeLeft: dayLength,
     dayLength,
     nectar: 0,
+    nectarGoal,
     pollinatedThisRun: 0,
     perchedFlower: -1,
     sipRate: 0,

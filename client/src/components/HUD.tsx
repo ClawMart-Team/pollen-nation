@@ -23,11 +23,13 @@ export function HUD() {
   const levelNum = useGame((s) => s.levelNum);
   const progress = useGame((s) => s.progress);
   const pause = useGame((s) => s.pause);
+  const goal = useGame((s) => s.sim?.nectarGoal ?? 0);
 
   const energyFrac = Math.max(0, hud.energy / hud.energyMax);
   const t = Math.max(0, hud.timeLeft);
   const mm = Math.floor(t / 60);
   const ss = Math.floor(t % 60).toString().padStart(2, "0");
+  const nectarMet = goal > 0 && hud.nectar >= goal;
 
   return (
     <div className="hud">
@@ -49,7 +51,9 @@ export function HUD() {
           <div className="hud-time">{mm}:{ss}</div>
         </div>
         <div className="hud-right">
-          <div className="hud-stat">🍯 {Math.floor(hud.nectar)}</div>
+          <div className={`hud-stat${nectarMet ? " met" : ""}`}>
+            🍯 {Math.floor(hud.nectar)}{goal > 0 ? ` / ${goal}` : ""}{nectarMet ? " ✓" : ""}
+          </div>
           <div className="hud-stat">
             🌸 {hud.pollinatedSession}
             {progress ? ` · ${progress.pollinationTotal}` : ""}

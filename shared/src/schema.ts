@@ -37,6 +37,10 @@ export const DifficultySchema = z.object({
   level: z.number().int().min(1),
   dayLengthSec: z.number().min(30).max(600),
   energyBudget: z.number().min(5).max(500),
+  /** Minimum nectar the player must collect to complete the level. Injected
+   *  server-side (see nectarGoalForLevel); optional so older cached maps and
+   *  generator output without it still validate. */
+  nectarGoal: z.number().min(0).optional(),
 });
 
 export const MapDataSchema = z.object({
@@ -67,4 +71,14 @@ export interface ProgressResponse {
   levelsUnlocked: number;
   pollinationTotal: number;
   bestScores: Record<number, number>;
+}
+
+/** Response of POST /api/level-complete */
+export interface LevelCompleteResponse {
+  ok: boolean;
+  /** Whether the run met the level's nectar quota (only then does it count). */
+  passed: boolean;
+  /** The nectar quota that was required for this level. */
+  nectarGoal: number;
+  progress: ProgressResponse;
 }

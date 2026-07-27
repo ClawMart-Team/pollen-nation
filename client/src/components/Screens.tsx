@@ -72,24 +72,36 @@ export function SummaryScreen() {
   const { summary, levelNum, progress, startLevel, toMenu } = useGame();
   if (!summary) return null;
   const nextUnlocked = (progress?.levelsUnlocked ?? 1) > levelNum;
+  const title = summary.passed
+    ? "🏅 Quota met!"
+    : summary.reason === "time"
+      ? "🌇 Dusk falls"
+      : "😴 Out of energy";
   return (
     <div className="screen">
-      <h1 className="title">{summary.reason === "time" ? "🌇 Dusk falls" : "😴 Out of energy"}</h1>
+      <h1 className="title">{title}</h1>
       <div className="summary-grid">
         <div>Nectar</div>
-        <div>{summary.score}</div>
+        <div className={summary.passed ? "pass" : "fail"}>
+          {summary.score} / {summary.goal}
+        </div>
         <div>Pollinated</div>
         <div>{summary.pollinated}</div>
         <div>Best</div>
         <div>{summary.best}</div>
       </div>
-      {nextUnlocked && (
+      {!summary.passed && (
+        <p className="error">
+          Collect at least {summary.goal} nectar to complete day {levelNum}.
+        </p>
+      )}
+      {summary.passed && nextUnlocked && (
         <button className="btn big" onClick={() => startLevel(levelNum + 1)}>
           Next day ▶
         </button>
       )}
       <button className="btn" onClick={() => startLevel(levelNum)}>
-        Replay day {levelNum}
+        {summary.passed ? `Replay day ${levelNum}` : `Try day ${levelNum} again`}
       </button>
       <button className="btn" onClick={toMenu}>
         Hive menu

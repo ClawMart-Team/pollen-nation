@@ -238,6 +238,18 @@ body,
   font-weight: 600;
 }
 
+.summary-grid .pass {
+  color: #8be08b;
+}
+
+.summary-grid .fail {
+  color: #ffb4ab;
+}
+
+.hud-stat.met {
+  color: #8be08b;
+}
+
 .summary-grid > div:nth-child(even) {
   text-align: right;
   font-weight: 800;

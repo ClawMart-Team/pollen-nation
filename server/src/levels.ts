@@ -1,4 +1,4 @@
-import { MapDataSchema, type MapData } from "@pollen/shared";
+import { MapDataSchema, nectarGoalForLevel, type MapData } from "@pollen/shared";
 import { stmts } from "./db";
 import { computeDifficulty } from "./difficulty";
 import { generateProceduralMap } from "./procedural";
@@ -71,6 +71,7 @@ async function generate(userId: string, levelNum: number): Promise<MapData> {
   }
   map.levelId = `level-${levelNum}`; // canonical, used as the pollination key
   map.difficulty.level = levelNum;
+  map.difficulty.nectarGoal = nectarGoalForLevel(levelNum); // completion quota
   map = sanitize(MapDataSchema.parse(map));
   stmts.putCachedLevel.run(userId, levelNum, JSON.stringify(map), source, Date.now());
   return map;
