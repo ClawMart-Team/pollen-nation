@@ -28,7 +28,7 @@ export function computeDifficulty(level: number): DifficultyInputs {
   return {
     level: n,
     dayLengthSec: clamp(120 + n * 12, 120, 300),
-    energyBudget: clamp(100 + n * 5, 100, 220),
+    energyBudget: clamp(8 + n * 0.4, 8, 16),
     clusterCount: clamp(7 + Math.floor(n * 1.2), 8, 26),
     minClusterDist: clamp(35 + n * 4, 35, 120),
     maxClusterDist: clamp(240 + n * 40, 280, 900),

@@ -36,7 +36,7 @@ export const FlowerSchema = z.object({
 export const DifficultySchema = z.object({
   level: z.number().int().min(1),
   dayLengthSec: z.number().min(30).max(600),
-  energyBudget: z.number().min(20).max(500),
+  energyBudget: z.number().min(5).max(500),
 });
 
 export const MapDataSchema = z.object({

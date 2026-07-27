@@ -118,8 +118,8 @@ export const CONFIG = {
   day: {
     /** Fallback day length if a map omits difficulty (s). */
     defaultLengthSec: 150,
-    /** Fallback starting energy budget. */
-    defaultEnergy: 100,
+    /** Fallback starting energy budget (tight: ~8 units keeps runs short). */
+    defaultEnergy: 8,
     /** Day fraction after which light shifts warm toward dusk. */
     duskStart: 0.65,
   },
