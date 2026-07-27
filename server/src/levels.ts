@@ -41,44 +41,58 @@ export function sanitize(map: MapData): MapData {
   return map;
 }
 
-const inflight = new Map<number, Promise<MapData>>();
+const inflight = new Map<string, Promise<MapData>>();
 
-async function generate(levelNum: number): Promise<MapData> {
+/** FNV-1a hash of the user id, used as a per-player seed salt so each player
+ *  gets their own layout for a given level. */
+function userSalt(userId: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < userId.length; i++) {
+    h ^= userId.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h | 0;
+}
+
+async function generate(userId: string, levelNum: number): Promise<MapData> {
   const d = computeDifficulty(levelNum);
+  const salt = userSalt(userId);
   let map: MapData;
   let source = "llm";
   try {
-    map = await generateLLMMap(d);
+    map = await generateLLMMap(d, salt);
   } catch (err) {
     // Fallback: deterministic procedural generator emitting the same schema.
     if (llmConfigured()) {
       console.warn(`[levels] LLM generation failed for level ${levelNum}, using procedural:`, err);
     }
-    map = generateProceduralMap(d);
+    map = generateProceduralMap(d, salt);
     source = "procedural";
   }
   map.levelId = `level-${levelNum}`; // canonical, used as the pollination key
   map.difficulty.level = levelNum;
   map = sanitize(MapDataSchema.parse(map));
-  stmts.putCachedLevel.run(levelNum, JSON.stringify(map), source, Date.now());
+  stmts.putCachedLevel.run(userId, levelNum, JSON.stringify(map), source, Date.now());
   return map;
 }
 
-/** Get a level, cached by level number: a replayed level is stable. */
-export async function getLevel(levelNum: number): Promise<MapData> {
-  const cached = stmts.getCachedLevel.get(levelNum) as { json: string } | undefined;
+/** Get a level for a user, cached per (user, level): a replayed level is
+ *  stable, and different players get different levels at the same number. */
+export async function getLevel(userId: string, levelNum: number): Promise<MapData> {
+  const cached = stmts.getCachedLevel.get(userId, levelNum) as { json: string } | undefined;
   if (cached) return JSON.parse(cached.json) as MapData;
-  let p = inflight.get(levelNum);
+  const key = `${userId}\u0000${levelNum}`;
+  let p = inflight.get(key);
   if (!p) {
-    p = generate(levelNum).finally(() => inflight.delete(levelNum));
-    inflight.set(levelNum, p);
+    p = generate(userId, levelNum).finally(() => inflight.delete(key));
+    inflight.set(key, p);
   }
   return p;
 }
 
 /** Fire-and-forget background prefetch of level N+1 while N is played. */
-export function prefetch(levelNum: number): void {
-  const cached = stmts.getCachedLevel.get(levelNum) as { json: string } | undefined;
-  if (cached || inflight.has(levelNum)) return;
-  getLevel(levelNum).catch((e) => console.warn(`[levels] prefetch ${levelNum} failed:`, e));
+export function prefetch(userId: string, levelNum: number): void {
+  const cached = stmts.getCachedLevel.get(userId, levelNum) as { json: string } | undefined;
+  if (cached || inflight.has(`${userId}\u0000${levelNum}`)) return;
+  getLevel(userId, levelNum).catch((e) => console.warn(`[levels] prefetch ${levelNum} failed:`, e));
 }

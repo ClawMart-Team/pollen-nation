@@ -11,7 +11,7 @@ const SCHEMA_DESCRIPTION = `{
   "difficulty": { "level": integer, "dayLengthSec": number, "energyBudget": number }
 }`;
 
-function buildPrompt(d: DifficultyInputs): string {
+function buildPrompt(d: DifficultyInputs, salt = 0): string {
   return `You are the level designer for "Pollinator", a 3D bee foraging game.
 Design level ${d.level} as MAP PARAMETERS AND PLACEMENTS ONLY — never geometry.
 
@@ -25,6 +25,8 @@ Difficulty inputs you MUST honor:
 - levelId: "level-${d.level}", pick any integer seed.
 
 Choose an evocative theme (palette = terrain base hex, skyTint = sky hex) and give the level character: vary cluster shapes, sizes, and species mixes per cluster.
+
+Design-variation seed for THIS player: ${salt >>> 0}. Use it to make this level's layout, theme, and cluster arrangement unique to this player (different players get different levels at the same number). Use it as the "seed" field too.
 
 Respond with ONLY a JSON object matching exactly this schema:
 ${SCHEMA_DESCRIPTION}`;
@@ -67,9 +69,9 @@ export function llmConfigured(): boolean {
  * once with the error fed back; on second failure, throw (caller falls back to
  * the procedural generator).
  */
-export async function generateLLMMap(d: DifficultyInputs): Promise<MapData> {
+export async function generateLLMMap(d: DifficultyInputs, salt = 0): Promise<MapData> {
   if (!llmConfigured()) throw new Error("no LLM configured");
-  let prompt = buildPrompt(d);
+  let prompt = buildPrompt(d, salt);
   let lastErr = "";
   for (let attempt = 0; attempt < 2; attempt++) {
     const raw = await callLLM(prompt);
@@ -78,13 +80,13 @@ export async function generateLLMMap(d: DifficultyInputs): Promise<MapData> {
       parsed = JSON.parse(raw);
     } catch (e) {
       lastErr = `Response was not valid JSON: ${String(e)}`;
-      prompt = `${buildPrompt(d)}\n\nYour previous response failed: ${lastErr}\nReturn corrected JSON only.`;
+      prompt = `${buildPrompt(d, salt)}\n\nYour previous response failed: ${lastErr}\nReturn corrected JSON only.`;
       continue;
     }
     const result = MapDataSchema.safeParse(parsed);
     if (result.success) return result.data;
     lastErr = JSON.stringify(result.error.issues.slice(0, 8));
-    prompt = `${buildPrompt(d)}\n\nYour previous response failed schema validation with these errors: ${lastErr}\nReturn corrected JSON only.`;
+    prompt = `${buildPrompt(d, salt)}\n\nYour previous response failed schema validation with these errors: ${lastErr}\nReturn corrected JSON only.`;
   }
   throw new Error(`LLM map failed validation twice: ${lastErr}`);
 }

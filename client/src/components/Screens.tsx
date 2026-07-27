@@ -1,14 +1,31 @@
 import { useEffect, useState } from "react";
 import { useGame } from "../state/store";
+import { DEBUG_USERS } from "../lib/api";
 
 export function MenuScreen() {
-  const { progress, levelNum, startLevel, error } = useGame();
+  const { progress, levelNum, startLevel, error, userId, switchUser } = useGame();
   const unlocked = progress?.levelsUnlocked ?? 1;
   const [picked, setPicked] = useState(levelNum);
   useEffect(() => setPicked(Math.min(levelNum, unlocked)), [levelNum, unlocked]);
 
+  const users = DEBUG_USERS.includes(userId) ? DEBUG_USERS : [userId, ...DEBUG_USERS];
+
   return (
     <div className="screen">
+      <div className="user-switch">
+        <label htmlFor="user-select">User</label>
+        <select
+          id="user-select"
+          value={userId}
+          onChange={(e) => switchUser(e.target.value)}
+        >
+          {users.map((u) => (
+            <option key={u} value={u}>
+              {u}
+            </option>
+          ))}
+        </select>
+      </div>
       <h1 className="title">🐝 Pollinator</h1>
       <p className="subtitle">Forage far. Fly home rich.</p>
       {error && <p className="error">{error}</p>}

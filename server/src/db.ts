@@ -14,8 +14,8 @@ export interface Stmts {
   };
   bestScores: { all(userId: string): { level_num: number; best: number }[] };
   maxLevelDone: { get(userId: string): { n: number | null } };
-  getCachedLevel: { get(levelNum: number): { json: string } | undefined };
-  putCachedLevel: { run(levelNum: number, json: string, source: string, ts: number): void };
+  getCachedLevel: { get(userId: string, levelNum: number): { json: string } | undefined };
+  putCachedLevel: { run(userId: string, levelNum: number, json: string, source: string, ts: number): void };
 }
 
 // In-memory backend used on serverless (Vercel). The filesystem there is
@@ -26,7 +26,7 @@ function memoryStmts(): Stmts {
   const SEP = "\u0000";
   const pollinations = new Set<string>();
   const results: { userId: string; levelNum: number; score: number }[] = [];
-  const cache = new Map<number, string>();
+  const cache = new Map<string, string>();
   return {
     insertPollination: {
       run(userId, levelId, flowerId) {
@@ -72,14 +72,14 @@ function memoryStmts(): Stmts {
       },
     },
     getCachedLevel: {
-      get(levelNum) {
-        const json = cache.get(levelNum);
+      get(userId, levelNum) {
+        const json = cache.get(`${userId}${SEP}${levelNum}`);
         return json === undefined ? undefined : { json };
       },
     },
     putCachedLevel: {
-      run(levelNum, json) {
-        cache.set(levelNum, json);
+      run(userId, levelNum, json) {
+        cache.set(`${userId}${SEP}${levelNum}`, json);
       },
     },
   };
@@ -112,11 +112,13 @@ CREATE TABLE IF NOT EXISTS level_results (
   ts        INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_results_user ON level_results(user_id, level_num);
-CREATE TABLE IF NOT EXISTS level_cache (
-  level_num INTEGER PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS user_level_cache (
+  user_id   TEXT NOT NULL,
+  level_num INTEGER NOT NULL,
   json      TEXT NOT NULL,
   source    TEXT NOT NULL,
-  ts        INTEGER NOT NULL
+  ts        INTEGER NOT NULL,
+  PRIMARY KEY (user_id, level_num)
 );
 `);
   return {
@@ -134,9 +136,9 @@ CREATE TABLE IF NOT EXISTS level_cache (
       `SELECT level_num, MAX(score) AS best FROM level_results WHERE user_id = ? GROUP BY level_num`
     ),
     maxLevelDone: db.prepare(`SELECT MAX(level_num) AS n FROM level_results WHERE user_id = ?`),
-    getCachedLevel: db.prepare(`SELECT json FROM level_cache WHERE level_num = ?`),
+    getCachedLevel: db.prepare(`SELECT json FROM user_level_cache WHERE user_id = ? AND level_num = ?`),
     putCachedLevel: db.prepare(
-      `INSERT OR REPLACE INTO level_cache (level_num, json, source, ts) VALUES (?, ?, ?, ?)`
+      `INSERT OR REPLACE INTO user_level_cache (user_id, level_num, json, source, ts) VALUES (?, ?, ?, ?, ?)`
     ),
   } as unknown as Stmts;
 }

@@ -1,13 +1,23 @@
 import type { LevelResponse, ProgressResponse } from "@pollen/shared";
 
-/** Anonymous per-device user id (v1). */
+/** Named debug users for the on-page user switcher. Each is an independent
+ *  player with their own generated levels and progress. */
+export const DEBUG_USERS = ["player-1", "player-2", "player-3", "player-4"];
+
+/** Current user id (persisted). Anonymous, per-device by default; the debug
+ *  switcher can point it at any of DEBUG_USERS. */
 export function getUserId(): string {
   let id = localStorage.getItem("pollinator_uid");
-  if (!id) {
-    id = "u_" + crypto.randomUUID().replace(/-/g, "").slice(0, 20);
+  if (!id || !/^[A-Za-z0-9_-]{4,64}$/.test(id)) {
+    id = DEBUG_USERS[0];
     localStorage.setItem("pollinator_uid", id);
   }
   return id;
+}
+
+/** Switch the active user (debug switcher). */
+export function setUserId(id: string): void {
+  localStorage.setItem("pollinator_uid", id);
 }
 
 async function json<T>(res: Response): Promise<T> {

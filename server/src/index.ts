@@ -29,18 +29,20 @@ function progressFor(userId: string): ProgressResponse {
   return { levelsUnlocked: maxDone + 1, pollinationTotal: total, bestScores };
 }
 
-// GET /api/level/:n?userId=... — validated MapData + this user's pollination
+// GET /api/level/:n?userId=... — validated MapData generated & cached per
+// user (each player gets their own levels), plus this user's pollination
 // records for the level (pollination survives reloads and replays).
 app.get("/api/level/:n", async (req, res) => {
   const n = parseInt(req.params.n, 10);
   if (!Number.isFinite(n) || n < 1 || n > 9999) return res.status(400).json({ error: "bad level" });
   const userId = asUserId(req.query.userId);
+  if (!userId) return res.status(400).json({ error: "userId required" });
   try {
-    const map = await getLevel(n);
-    prefetch(n + 1); // background-generate the next level for instant transitions
-    const pollinatedFlowerIds = userId
-      ? (stmts.pollinatedForLevel.all(userId, map.levelId) as { flower_id: string }[]).map((r) => r.flower_id)
-      : [];
+    const map = await getLevel(userId, n);
+    prefetch(userId, n + 1); // background-generate the next level for instant transitions
+    const pollinatedFlowerIds = (
+      stmts.pollinatedForLevel.all(userId, map.levelId) as { flower_id: string }[]
+    ).map((r) => r.flower_id);
     const body: LevelResponse = { map, pollinatedFlowerIds };
     res.json(body);
   } catch (e) {

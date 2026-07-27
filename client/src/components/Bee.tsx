@@ -12,6 +12,19 @@ const TARGET_SIZE = 1.0;
  *  the imported model points the wrong way. */
 const MODEL_YAW = 0;
 
+// --- Wing flap (bee.glb has no animation clips, so we drive it procedurally).
+// The GLB splits geometry by material; the light-blue wings are their own
+// material group, so we can rotate that sub-mesh. Both wings share one mesh and
+// pivot at the body origin, so they flap together.
+/** Material name of the wing group inside bee.glb. */
+const WING_MAT_NAME = "Material.004";
+/** Local axis the wings rotate about to flap. Tune if the flap looks wrong. */
+const WING_FLAP_AXIS = new THREE.Vector3(0, 0, 1);
+/** Flap speed (radians/sec multiplier on sim.t). */
+const WING_FLAP_FREQ = 55;
+/** Peak flap angle (radians). */
+const WING_FLAP_AMP = 0.5;
+
 /**
  * The player's bee, rendered from bee.glb. The simulation stays flat; the
  * model is curved with the planet like everything else, and rides a blob
@@ -45,16 +58,21 @@ export function Bee({ sim }: { sim: Sim }) {
       owned.push(c);
       return c;
     };
+    // Wing meshes we can flap procedurally, with their rest orientation.
+    const wings: { mesh: THREE.Mesh; rest: THREE.Quaternion }[] = [];
+    const isWingMat = (m: THREE.Material) => m.name === WING_MAT_NAME;
     root.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
       mesh.castShadow = mesh.receiveShadow = false;
       mesh.frustumCulled = false;
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      if (mats.some(isWingMat)) wings.push({ mesh, rest: mesh.quaternion.clone() });
       mesh.material = Array.isArray(mesh.material)
         ? mesh.material.map(curve)
         : curve(mesh.material as THREE.Material);
     });
-    return { root, owned };
+    return { root, owned, wings };
   }, [gltf]);
 
   // Play the model's own animation (wing flap etc.) if present.
@@ -71,6 +89,8 @@ export function Bee({ sim }: { sim: Sim }) {
     [model]
   );
 
+  const flapQuat = useRef(new THREE.Quaternion()).current;
+
   useFrame(() => {
     const g = group.current;
     g.position.copy(sim.pos);
@@ -78,6 +98,11 @@ export function Bee({ sim }: { sim: Sim }) {
     g.rotation.y = sim.heading;
     g.rotation.z = sim.roll;
     g.rotation.x = THREE.MathUtils.clamp(-sim.vel.y * 0.045, -0.5, 0.5);
+
+    // Flap the wings around their rest pose.
+    const angle = Math.sin(sim.t * WING_FLAP_FREQ) * WING_FLAP_AMP;
+    flapQuat.setFromAxisAngle(WING_FLAP_AXIS, angle);
+    for (const w of model.wings) w.mesh.quaternion.copy(w.rest).multiply(flapQuat);
 
     // Blob shadow follows the terrain under the bee.
     const gy = sim.heightAt(sim.pos.x, sim.pos.z);

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { MapData, ProgressResponse } from "@pollen/shared";
-import { fetchLevel, fetchProgress, postLevelComplete } from "../lib/api";
+import { fetchLevel, fetchProgress, postLevelComplete, getUserId, setUserId } from "../lib/api";
 import { createSim, type Sim } from "../game/sim";
 import { resetInput } from "../game/input";
 
@@ -26,6 +26,7 @@ export interface Summary {
 
 interface GameStore {
   phase: Phase;
+  userId: string;
   levelNum: number;
   map: MapData | null;
   sim: Sim | null;
@@ -36,6 +37,7 @@ interface GameStore {
   paused: boolean;
 
   boot(): Promise<void>;
+  switchUser(id: string): Promise<void>;
   startLevel(n: number): Promise<void>;
   endLevel(reason: "time" | "energy"): void;
   setHud(h: HudData): void;
@@ -57,6 +59,7 @@ const emptyHud: HudData = {
 
 export const useGame = create<GameStore>((set, get) => ({
   phase: "boot",
+  userId: getUserId(),
   levelNum: 1,
   map: null,
   sim: null,
@@ -73,6 +76,23 @@ export const useGame = create<GameStore>((set, get) => ({
     } catch {
       set({ progress: { levelsUnlocked: 1, pollinationTotal: 0, bestScores: {} }, phase: "menu" });
     }
+  },
+
+  // Debug: become a different user. Each user has their own generated levels
+  // and progress, so a brand-new user starts back at day 1.
+  async switchUser(id: string) {
+    setUserId(id);
+    set({
+      userId: id,
+      phase: "boot",
+      map: null,
+      sim: null,
+      summary: null,
+      error: null,
+      paused: false,
+      progress: null,
+    });
+    await get().boot();
   },
 
   async startLevel(n: number) {

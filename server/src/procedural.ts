@@ -23,10 +23,12 @@ const PALETTES = [
 
 /**
  * Deterministic procedural map generator. Emits the exact same schema as the
- * LLM path — the client never knows which one produced a map.
+ * LLM path — the client never knows which one produced a map. `salt` mixes a
+ * per-user value into the seed so each player gets their own layout for a
+ * given level while the difficulty curve stays identical.
  */
-export function generateProceduralMap(d: DifficultyInputs): MapData {
-  const seed = (d.level * 7919 + 13) | 0;
+export function generateProceduralMap(d: DifficultyInputs, salt = 0): MapData {
+  const seed = (d.level * 7919 + 13 + (salt | 0)) | 0;
   const rnd = mulberry32(seed);
   const pal = PALETTES[(d.level - 1) % PALETTES.length];
 
