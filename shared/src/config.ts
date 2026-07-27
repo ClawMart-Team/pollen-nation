@@ -110,6 +110,9 @@ export const CONFIG = {
     chunkRadius: 5,
     /** Grid cell size used to group flowers into clusters (m). */
     clusterCell: 30,
+    /** Grass tufts scattered per terrain chunk (public/models/grass.glb).
+     *  Total instances ≈ (2·chunkRadius+1)² · grassPerChunk in ONE draw call. */
+    grassPerChunk: 40,
   },
 
   day: {
