@@ -35,7 +35,11 @@ export function Grass({ sim }: { sim: Sim }) {
     const mesh = src as unknown as THREE.Mesh;
     // Bake the GLB node transform into the geometry so instances scale sanely.
     const geo = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
-    const mat = curveMaterial((mesh.material as THREE.Material).clone());
+    // The GLB material is unlit (KHR_materials_unlit) — it ignores scene
+    // lighting and reads as black silhouettes against fog. Swap in a lit,
+    // fog-respecting Lambert keeping the GLB's tint.
+    const srcMat = mesh.material as THREE.MeshBasicMaterial;
+    const mat = curveMaterial(new THREE.MeshLambertMaterial({ color: srcMat.color }));
     return { geo, mat };
   }, [gltf]);
   useEffect(() => () => {
@@ -54,7 +58,12 @@ export function Grass({ sim }: { sim: Sim }) {
     const maxZ = sim.map.terrain.sizeZ;
     let n = 0;
     for (let cx = ccx - RADIUS; cx <= ccx + RADIUS; cx++)
-      for (let cz = ccz - RADIUS; cz <= ccz + RADIUS; cz++)
+      for (let cz = ccz - RADIUS; cz <= ccz + RADIUS; cz++) {
+        // Match Terrain's circular chunk set so grass never floats where
+        // no ground chunk is drawn.
+        const dx = cx - ccx;
+        const dz = cz - ccz;
+        if (dx * dx + dz * dz > RADIUS * RADIUS + 2) continue;
         for (let i = 0; i < PER_CHUNK; i++) {
           const x = (cx + hash(cx, cz, i)) * SIZE;
           const z = (cz + hash(cx, cz, i + 999)) * SIZE;
@@ -65,6 +74,7 @@ export function Grass({ sim }: { sim: Sim }) {
           dummy.updateMatrix();
           ref.current.setMatrixAt(n++, dummy.matrix);
         }
+      }
     ref.current.count = n;
     ref.current.instanceMatrix.needsUpdate = true;
   });
