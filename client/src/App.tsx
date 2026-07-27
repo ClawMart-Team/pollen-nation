@@ -2,13 +2,14 @@ import { useEffect, useRef } from "react";
 import { useGame } from "./state/store";
 import { GameCanvas } from "./components/GameCanvas";
 import { HUD } from "./components/HUD";
-import { MenuScreen, LoadingScreen, SummaryScreen, TutorialOverlay } from "./components/Screens";
+import { MenuScreen, LoadingScreen, SummaryScreen, TutorialOverlay, PauseScreen } from "./components/Screens";
 import { bindInput } from "./game/input";
 import { ensureAudio } from "./game/audio";
 
 export default function App() {
   const phase = useGame((s) => s.phase);
   const sim = useGame((s) => s.sim);
+  const paused = useGame((s) => s.paused);
   const boot = useGame((s) => s.boot);
   const inputRef = useRef<HTMLDivElement>(null);
 
@@ -38,6 +39,7 @@ export default function App() {
           <div ref={inputRef} className="input-layer" />
           <HUD />
           <TutorialOverlay />
+          {paused && <PauseScreen />}
         </>
       )}
       {(phase === "menu" || phase === "boot") && <MenuScreen />}

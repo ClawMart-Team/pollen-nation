@@ -22,6 +22,7 @@ export function HUD() {
   const hud = useGame((s) => s.hud);
   const levelNum = useGame((s) => s.levelNum);
   const progress = useGame((s) => s.progress);
+  const pause = useGame((s) => s.pause);
 
   const energyFrac = Math.max(0, hud.energy / hud.energyMax);
   const t = Math.max(0, hud.timeLeft);
@@ -54,6 +55,9 @@ export function HUD() {
             {progress ? ` · ${progress.pollinationTotal}` : ""}
           </div>
         </div>
+        <button className="pause-btn" aria-label="Pause" onPointerDown={pause}>
+          ❘❘
+        </button>
       </div>
 
       {/* Compass petals (§8): edge markers pointing at off-screen rich clusters. */}

@@ -33,6 +33,7 @@ interface GameStore {
   progress: ProgressResponse | null;
   summary: Summary | null;
   error: string | null;
+  paused: boolean;
 
   boot(): Promise<void>;
   startLevel(n: number): Promise<void>;
@@ -40,6 +41,8 @@ interface GameStore {
   setHud(h: HudData): void;
   toMenu(): void;
   bumpPollinationTotal(): void;
+  pause(): void;
+  resume(): void;
 }
 
 const emptyHud: HudData = {
@@ -61,6 +64,7 @@ export const useGame = create<GameStore>((set, get) => ({
   progress: null,
   summary: null,
   error: null,
+  paused: false,
 
   async boot() {
     try {
@@ -72,7 +76,7 @@ export const useGame = create<GameStore>((set, get) => ({
   },
 
   async startLevel(n: number) {
-    set({ phase: "loading", levelNum: n, error: null, summary: null });
+    set({ phase: "loading", levelNum: n, error: null, summary: null, paused: false });
     try {
       const { map, pollinatedFlowerIds } = await fetchLevel(n);
       const sim = createSim(map, pollinatedFlowerIds);
@@ -112,7 +116,16 @@ export const useGame = create<GameStore>((set, get) => ({
   },
 
   toMenu() {
-    set({ phase: "menu", sim: null, map: null, summary: null });
+    set({ phase: "menu", sim: null, map: null, summary: null, paused: false });
+  },
+
+  pause() {
+    if (get().phase === "playing") set({ paused: true });
+  },
+
+  resume() {
+    resetInput(); // drop any taps/steering queued while the overlay was up
+    set({ paused: false });
   },
 
   bumpPollinationTotal() {

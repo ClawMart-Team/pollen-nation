@@ -91,6 +91,26 @@ body,
   margin-bottom: 2px;
 }
 
+.pause-btn {
+  pointer-events: auto;
+  margin-left: 10px;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: -2px;
+  cursor: pointer;
+}
+
+.pause-btn:active {
+  background: rgba(0, 0, 0, 0.55);
+}
+
 .petal {
   position: absolute;
   pointer-events: none;
@@ -111,6 +131,13 @@ body,
   color: #223;
   text-align: center;
   padding: 24px;
+}
+
+/* Pause: translucent so the frozen world stays visible underneath. */
+.pause-screen {
+  background: rgba(20, 30, 40, 0.55);
+  color: #fff;
+  backdrop-filter: blur(3px);
 }
 
 .title {

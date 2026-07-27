@@ -81,6 +81,24 @@ export function SummaryScreen() {
   );
 }
 
+/** Pause overlay: freezes the sim (GameLoop skips stepping while paused). */
+export function PauseScreen() {
+  const resume = useGame((s) => s.resume);
+  const toMenu = useGame((s) => s.toMenu);
+  return (
+    <div className="screen pause-screen">
+      <h1 className="title">⏸️ Resting</h1>
+      <p className="subtitle">The meadow waits. Daylight is on hold.</p>
+      <button className="btn big" onClick={resume}>
+        Keep flying
+      </button>
+      <button className="btn" onClick={toMenu}>
+        Hive menu
+      </button>
+    </div>
+  );
+}
+
 /** First-run tutorial overlay; dismissed once, remembered in localStorage. */
 export function TutorialOverlay() {
   const [seen, setSeen] = useState(() => localStorage.getItem("pollinator_tut") === "1");
