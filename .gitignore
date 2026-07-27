@@ -4,3 +4,6 @@ dist/
 .env
 server/data/*.sqlite*
 .DS_Store
+.vercel
+api/index.js
+api/index.js.map
