@@ -1,16 +1,75 @@
-import { useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
+import { useGLTF, useAnimations } from "@react-three/drei";
+import { clone as skeletonClone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import * as THREE from "three";
 import type { Sim } from "../game/sim";
+import { curveMaterial } from "../lib/curvature";
+
+/** Target length (longest axis) of the bee in world units. */
+const TARGET_SIZE = 1.0;
+/** Extra yaw to face the model's nose toward +Z (flight forward). Adjust if
+ *  the imported model points the wrong way. */
+const MODEL_YAW = 0;
 
 /**
- * Low-poly bee + flapping wings + blob shadow (no real-time shadow maps, §12).
+ * The player's bee, rendered from bee.glb. The simulation stays flat; the
+ * model is curved with the planet like everything else, and rides a blob
+ * shadow (no real-time shadow maps, §12). If the GLB ships an animation clip
+ * (e.g. a wing flap) it is played on a loop.
  */
 export function Bee({ sim }: { sim: Sim }) {
   const group = useRef<THREE.Group>(null!);
-  const wingL = useRef<THREE.Group>(null!);
-  const wingR = useRef<THREE.Group>(null!);
   const shadow = useRef<THREE.Mesh>(null!);
+  const gltf = useGLTF("/models/bee.glb");
+
+  // Clone the loaded scene (SkeletonUtils supports skinned meshes), normalize
+  // its size/position, and curve its materials.
+  const model = useMemo(() => {
+    const root = skeletonClone(gltf.scene) as THREE.Object3D;
+
+    // Center at the origin and scale so the longest axis is TARGET_SIZE.
+    const box = new THREE.Box3().setFromObject(root);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const s = TARGET_SIZE / Math.max(size.x, size.y, size.z || 1);
+    root.scale.setScalar(s);
+    root.position.set(-center.x * s, -center.y * s, -center.z * s);
+    root.rotation.y = MODEL_YAW;
+
+    // Curve each material so the bee bends with the planet. Clone first so we
+    // don't mutate the cached GLTF materials shared by useGLTF.
+    const owned: THREE.Material[] = [];
+    const curve = (m: THREE.Material) => {
+      const c = curveMaterial(m.clone());
+      owned.push(c);
+      return c;
+    };
+    root.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.castShadow = mesh.receiveShadow = false;
+      mesh.frustumCulled = false;
+      mesh.material = Array.isArray(mesh.material)
+        ? mesh.material.map(curve)
+        : curve(mesh.material as THREE.Material);
+    });
+    return { root, owned };
+  }, [gltf]);
+
+  // Play the model's own animation (wing flap etc.) if present.
+  const { actions } = useAnimations(gltf.animations, model.root);
+  useEffect(() => {
+    const first = Object.values(actions)[0];
+    first?.reset().play();
+  }, [actions]);
+
+  useEffect(
+    () => () => {
+      for (const m of model.owned) m.dispose();
+    },
+    [model]
+  );
 
   useFrame(() => {
     const g = group.current;
@@ -20,19 +79,12 @@ export function Bee({ sim }: { sim: Sim }) {
     g.rotation.z = sim.roll;
     g.rotation.x = THREE.MathUtils.clamp(-sim.vel.y * 0.045, -0.5, 0.5);
 
-    // Wings flutter constantly; a recent flap boosts the amplitude.
-    const sinceFlap = sim.t - sim.lastFlapAt;
-    const amp = sim.mode === "perched" ? 0.12 : 0.55 + Math.max(0, 1 - sinceFlap * 2.5) * 0.5;
-    const w = Math.sin(sim.t * 55) * amp;
-    wingL.current.rotation.z = 0.35 + w;
-    wingR.current.rotation.z = -0.35 - w;
-
     // Blob shadow follows the terrain under the bee.
     const gy = sim.heightAt(sim.pos.x, sim.pos.z);
     shadow.current.position.set(sim.pos.x, gy + 0.06, sim.pos.z);
     const alt = Math.max(0.5, sim.pos.y - gy);
-    const s = THREE.MathUtils.clamp(1.4 - alt * 0.02, 0.5, 1.4);
-    shadow.current.scale.setScalar(s);
+    const sc = THREE.MathUtils.clamp(1.4 - alt * 0.02, 0.5, 1.4);
+    shadow.current.scale.setScalar(sc);
     (shadow.current.material as THREE.MeshBasicMaterial).opacity = THREE.MathUtils.clamp(
       0.34 - alt * 0.006,
       0.06,
@@ -43,46 +95,7 @@ export function Bee({ sim }: { sim: Sim }) {
   return (
     <>
       <group ref={group}>
-        {/* body */}
-        <mesh scale={[0.28, 0.26, 0.42]}>
-          <sphereGeometry args={[1, 10, 8]} />
-          <meshLambertMaterial color="#f2b31f" />
-        </mesh>
-        {/* rear stripe */}
-        <mesh position={[0, 0, -0.2]} scale={[0.17, 0.16, 0.2]}>
-          <sphereGeometry args={[1, 8, 6]} />
-          <meshLambertMaterial color="#4a3a1c" />
-        </mesh>
-        {/* head */}
-        <mesh position={[0, 0.05, 0.4]} scale={[0.16, 0.16, 0.16]}>
-          <sphereGeometry args={[1, 8, 6]} />
-          <meshLambertMaterial color="#2a2318" />
-        </mesh>
-        {/* wings: pivot groups at the shoulders, planes lying flat */}
-        <group ref={wingL} position={[0.1, 0.18, 0]}>
-          <mesh position={[0.3, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-            <planeGeometry args={[0.55, 0.26]} />
-            <meshBasicMaterial
-              color="#dfeeff"
-              transparent
-              opacity={0.55}
-              side={THREE.DoubleSide}
-              depthWrite={false}
-            />
-          </mesh>
-        </group>
-        <group ref={wingR} position={[-0.1, 0.18, 0]}>
-          <mesh position={[-0.3, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-            <planeGeometry args={[0.55, 0.26]} />
-            <meshBasicMaterial
-              color="#dfeeff"
-              transparent
-              opacity={0.55}
-              side={THREE.DoubleSide}
-              depthWrite={false}
-            />
-          </mesh>
-        </group>
+        <primitive object={model.root} />
       </group>
       <mesh ref={shadow} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[0.5, 12]} />
@@ -91,3 +104,5 @@ export function Bee({ sim }: { sim: Sim }) {
     </>
   );
 }
+
+useGLTF.preload("/models/bee.glb");
