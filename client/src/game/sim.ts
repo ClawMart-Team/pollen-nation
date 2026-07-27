@@ -61,6 +61,8 @@ export interface Sim {
   skimCooldown: number;
   takeoffGrace: number;
   dieT: number;
+  /** Seconds the current tap has been held (for dive engagement). */
+  holdT: number;
   /** Wing-flap animation trigger timestamp (sim time). */
   lastFlapAt: number;
   t: number;
@@ -110,7 +112,7 @@ export function createSim(map: MapData, pollinatedIds: string[]): Sim {
     };
   });
 
-  // Group flowers into clusters on a coarse grid (beacons + compass petals).
+  // Group flowers into clusters on a coarse grid (beacons + cluster rings).
   const cell = CONFIG.world.clusterCell;
   const byCell = new Map<string, number[]>();
   flowers.forEach((f, i) => {
@@ -160,6 +162,7 @@ export function createSim(map: MapData, pollinatedIds: string[]): Sim {
     skimCooldown: 0,
     takeoffGrace: 0,
     dieT: 0,
+    holdT: 0,
     lastFlapAt: -10,
     t: 0,
     flowers,
@@ -295,9 +298,24 @@ export function stepSim(sim: Sim, dt: number, inp: InputState): void {
     inp.flaps = 0;
   }
 
+  // Dive: after the initial flap, keeping the tap held tucks the bee into a
+  // downward dive (steeper and faster than a glide).
+  let diving = false;
+  if (!dying && inp.down) {
+    sim.holdT += dt;
+    if (sim.holdT >= F.diveDelaySec) diving = true;
+  } else {
+    sim.holdT = 0;
+  }
+
   // Gravity + glide: untapped, the bee settles into a slow descent.
   sim.vel.y += F.gravity * dt;
-  if (!dying) sim.vel.y = Math.max(sim.vel.y, -F.glideFallSpeed);
+  if (diving) {
+    sim.vel.y -= F.diveAccel * dt;
+    sim.vel.y = Math.max(sim.vel.y, -F.maxDiveSpeed);
+  } else if (!dying) {
+    sim.vel.y = Math.max(sim.vel.y, -F.glideFallSpeed);
+  }
 
   // Forward motion along heading.
   const speedMult = dying ? 0.3 : 1;

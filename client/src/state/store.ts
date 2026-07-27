@@ -14,7 +14,6 @@ export interface HudData {
   dayFrac: number;
   nectar: number;
   pollinatedSession: number;
-  petals: { x: number; y: number; angle: number; strength: number }[];
 }
 
 export interface Summary {
@@ -58,7 +57,6 @@ const emptyHud: HudData = {
   dayFrac: 0,
   nectar: 0,
   pollinatedSession: 0,
-  petals: [],
 };
 
 export const useGame = create<GameStore>((set, get) => ({

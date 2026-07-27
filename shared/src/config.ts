@@ -15,10 +15,17 @@ export const CONFIG = {
     flapImpulse: 4.6,
     /** Max upward speed reachable by rapid tapping (m/s). */
     maxRiseSpeed: 7,
+    /** How long the tap must be held (after the initial flap) before the bee
+     *  tucks into a dive (s). Roughly one wing-flap beat. */
+    diveDelaySec: 0.22,
+    /** Downward acceleration while diving (m/s^2), on top of gravity. */
+    diveAccel: 22,
+    /** Max downward speed while diving (m/s). Overrides the glide cap. */
+    maxDiveSpeed: 16,
     /** Energy cost per flap. */
-    flapEnergyCost: 0.35,
+    flapEnergyCost: 0,
     /** Passive energy drain per second (may be 0). Hovering isn't free. */
-    passiveDrainPerSec: 0.1,
+    passiveDrainPerSec: 0,
     /** Max turn rate at a full-edge tap (rad/s). */
     turnRateMax: 1.7,
     /** Fraction of half-screen-width around centre that steers straight. */
@@ -32,7 +39,7 @@ export const CONFIG = {
     /** Hover clearance kept above the terrain surface (m). */
     minAltitude: 0.45,
     /** Energy penalty when the bee skims the terrain (soft floor, not fatal). */
-    terrainSkimEnergyCost: 1.5,
+    terrainSkimEnergyCost: 0,
     /** Upward bounce velocity applied on a terrain skim (m/s). */
     terrainSkimBounce: 3.0,
     /** Cooldown between terrain-skim penalties (s) so a long skid isn't ruinous. */
@@ -127,13 +134,6 @@ export const CONFIG = {
   hud: {
     /** HUD store update frequency (Hz) — throttled to avoid React re-renders. */
     updateHz: 8,
-    /** Max compass petals shown at once. */
-    maxPetals: 3,
-    /** Clusters closer than this are "on screen enough" — no petal (m). */
-    petalMinDist: 25,
-    /** Clusters farther than this are considered hidden below the horizon and
-     *  always get a petal, even when dead ahead (m). */
-    petalHorizonDist: 45,
   },
 
   fx: {
@@ -144,6 +144,28 @@ export const CONFIG = {
     /** Beacons fade out within this distance of the bee (they guide from afar;
      *  up close they'd fill the near-first-person camera). */
     beaconFadeNear: 35,
+
+    /** In-world annular arc "ribbon" markers that hover over each cluster and
+     *  grow as the bee approaches. They replace the old 2D compass petals. */
+    ring: {
+      /** Inner/outer radius of the ring band at unit scale (m). */
+      innerRadius: 1.5,
+      outerRadius: 2.1,
+      /** Sweep of the arc ribbon (radians). < 2π = partial ring. */
+      arc: Math.PI * 1.35,
+      /** Height the ribbon floats above the cluster ground (m). */
+      height: 7,
+      /** Max curvature compensation added to the height (m). Beyond the matching
+       *  distance the ribbon sinks with the horizon and the beacon takes over. */
+      maxLift: 16,
+      /** At/under nearDist the ribbon is maxScale; at/over farDist it's minScale. */
+      nearDist: 8,
+      farDist: 70,
+      minScale: 0.6,
+      maxScale: 3.0,
+      /** Peak opacity (scaled by remaining nectar). */
+      maxOpacity: 0.85,
+    },
   },
 
   perf: {

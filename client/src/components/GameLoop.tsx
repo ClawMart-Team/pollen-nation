@@ -7,7 +7,7 @@ import { input } from "../game/input";
 import { fxBus } from "../game/fx";
 import * as audio from "../game/audio";
 import { postPollinate } from "../lib/api";
-import { useGame, type HudData } from "../state/store";
+import { useGame } from "../state/store";
 
 const camTarget = new THREE.Vector3();
 const camPos = new THREE.Vector3();
@@ -78,40 +78,10 @@ export function GameLoop({ sim }: { sim: Sim }) {
     camTarget.y = sim.pos.y - CONFIG.camera.lookDown;
     camera.lookAt(camTarget);
 
-    // --- Throttled HUD + compass petals. ---
+    // --- Throttled HUD update. ---
     hudAccum.current += dt;
     if (hudAccum.current >= 1 / CONFIG.hud.updateHz) {
       hudAccum.current = 0;
-      // Bearing-based petals: with the curved world, screen projection can't
-      // tell that a cluster dead ahead is hidden below the horizon, so we use
-      // distance + bearing relative to the bee's heading instead.
-      const petals: HudData["petals"] = [];
-      const fwdX = Math.sin(sim.heading);
-      const fwdZ = Math.cos(sim.heading);
-      const ranked = sim.clusters
-        .filter((c) => c.nectarLeft > 4 && c.center.distanceTo(sim.pos) > CONFIG.hud.petalMinDist)
-        .sort((a, b) => b.nectarLeft - a.nectarLeft)
-        .slice(0, CONFIG.hud.maxPetals);
-      for (const c of ranked) {
-        const dx = c.center.x - sim.pos.x;
-        const dz = c.center.z - sim.pos.z;
-        const dist = Math.hypot(dx, dz);
-        const ux = dx / dist;
-        const uz = dz / dist;
-        // Signed angle from heading to cluster; negative = screen-left.
-        const ang = Math.atan2(fwdX * uz - fwdZ * ux, fwdX * ux + fwdZ * uz);
-        const onScreen = dist < CONFIG.hud.petalHorizonDist && Math.abs(ang) < 0.45;
-        if (onScreen) continue; // visible over the horizon — beacon carries it
-        // Place the petal on an ellipse around screen centre, pointing outward.
-        const px = 50 + Math.sin(ang) * 42;
-        const py = THREE.MathUtils.clamp(44 - Math.cos(ang) * 34, 8, 70);
-        petals.push({
-          x: px,
-          y: py,
-          angle: Math.atan2(-Math.cos(ang), Math.sin(ang)),
-          strength: Math.min(1, c.nectarLeft / Math.max(1, c.nectarMax)),
-        });
-      }
       useGame.getState().setHud({
         energy: sim.energy,
         energyMax: sim.energyMax,
@@ -119,7 +89,6 @@ export function GameLoop({ sim }: { sim: Sim }) {
         dayFrac: 1 - sim.timeLeft / sim.dayLength,
         nectar: sim.nectar,
         pollinatedSession: sim.pollinatedThisRun,
-        petals,
       });
     }
 

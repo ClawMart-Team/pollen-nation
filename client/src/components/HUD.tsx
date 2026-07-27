@@ -63,24 +63,6 @@ export function HUD() {
           ❘❘
         </button>
       </div>
-
-      {/* Compass petals (§8): edge markers pointing at off-screen rich clusters. */}
-      {hud.petals.map((p, i) => (
-        <div
-          key={i}
-          className="petal"
-          style={{
-            left: `${p.x}%`,
-            top: `${p.y}%`,
-            opacity: 0.35 + p.strength * 0.65,
-            transform: `translate(-50%, -50%) rotate(${p.angle}rad)`,
-          }}
-        >
-          <svg width="26" height="26" viewBox="0 0 26 26">
-            <path d="M 24 13 C 16 5, 6 7, 2 13 C 6 19, 16 21, 24 13 Z" fill="#ff7fc0" stroke="#fff" strokeWidth="1" />
-          </svg>
-        </div>
-      ))}
     </div>
   );
 }
