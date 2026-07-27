@@ -25,8 +25,7 @@ export function GameLoop({ sim }: { sim: Sim }) {
   useFrame((_, dtRaw) => {
     const dt = Math.min(dtRaw, 0.05);
     const { phase, paused } = useGame.getState();
-    if (phase !== "playing") return;
-    if (paused) {
+    if (phase !== "playing" || paused) {
       audio.updateBuzz(dt, false); // let the wing buzz die out while frozen
       return;
     }

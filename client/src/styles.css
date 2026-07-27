@@ -19,6 +19,8 @@ body,
 .app {
   position: fixed;
   inset: 0;
+  /* Backdrop for boot/menu before any world exists; the canvas covers it. */
+  background: linear-gradient(#8ecdf0, #cbe8b7);
 }
 
 .input-layer {
@@ -118,6 +120,7 @@ body,
 }
 
 /* ---------- Screens ---------- */
+/* Transparent overlay: the world stays visible behind menu/summary screens. */
 .screen {
   position: absolute;
   inset: 0;
@@ -127,8 +130,8 @@ body,
   align-items: center;
   justify-content: center;
   gap: 14px;
-  background: linear-gradient(#8ecdf0, #cbe8b7);
-  color: #223;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
   text-align: center;
   padding: 24px;
 }
@@ -150,7 +153,7 @@ body,
 }
 
 .error {
-  color: #b3261e;
+  color: #ffb4ab;
   font-weight: 600;
 }
 

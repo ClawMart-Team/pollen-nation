@@ -116,7 +116,8 @@ export const useGame = create<GameStore>((set, get) => ({
   },
 
   toMenu() {
-    set({ phase: "menu", sim: null, map: null, summary: null, paused: false });
+    // Keep sim/map so the frozen world stays visible behind the menu.
+    set({ phase: "menu", summary: null, paused: false });
   },
 
   pause() {

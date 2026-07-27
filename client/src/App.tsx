@@ -32,9 +32,11 @@ export default function App() {
 
   return (
     <div className="app">
+      {/* World stays mounted whenever a sim exists so it remains visible
+          (frozen) behind the summary / menu screens between levels. */}
+      {sim && <GameCanvas sim={sim} />}
       {phase === "playing" && sim && (
         <>
-          <GameCanvas sim={sim} />
           {/* transparent input layer above the canvas, below the HUD */}
           <div ref={inputRef} className="input-layer" />
           <HUD />
