@@ -8,6 +8,12 @@ import { getLevel, prefetch } from "./levels";
 const app = express();
 app.use(express.json());
 
+// Lightweight health check so the deployed function can be verified directly
+// (e.g. GET /api/health) independent of level generation.
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: true, serverless: !!process.env.VERCEL });
+});
+
 const asUserId = (v: unknown): string | null => {
   if (typeof v !== "string") return null;
   const s = v.trim();
