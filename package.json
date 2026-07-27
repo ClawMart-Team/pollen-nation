@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "concurrently -k -n server,client \"npm run dev -w server\" \"npm run dev -w client\"",
     "build": "npm run build -w client",
-    "build:api": "esbuild server/src/index.ts --bundle --platform=node --format=cjs --target=node20 --outfile=api/index.js --external:better-sqlite3",
+    "build:api": "esbuild server/src/index.ts --bundle --platform=node --format=cjs --target=node20 --minify --outfile=api/index.js --external:better-sqlite3",
     "vercel-build": "npm run build --prefix client && npm run build:api",
     "typecheck": "npm run typecheck -w shared && npm run typecheck -w server && npm run typecheck -w client",
     "start": "npm run start -w server"
