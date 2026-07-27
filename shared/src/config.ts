@@ -37,8 +37,9 @@ export const CONFIG = {
     terrainSkimBounce: 3.0,
     /** Cooldown between terrain-skim penalties (s) so a long skid isn't ruinous. */
     terrainSkimCooldown: 0.6,
-    /** Altitude ceiling above terrain (soft clamp; keeps camera/fog readable). */
-    maxAltitude: 45,
+    /** Altitude ceiling above terrain (soft clamp). Also bounds how far past
+     *  the horizon a climbing bee can scout on the curved world. */
+    maxAltitude: 30,
   },
 
   collisions: {
@@ -101,19 +102,24 @@ export const CONFIG = {
   },
 
   fog: {
-    near: 18,
-    /** Draw distance. Tight on purpose: only nearby flowers are visible; the
-     *  rest hide over the horizon and are revealed as the bee approaches. */
-    far: 70,
+    /** Fog is only a faint atmospheric haze now — the planet's HORIZON hides
+     *  distant content (see world.planetRadius), not the fog. */
+    near: 80,
+    far: 190,
   },
 
   world: {
+    /** Radius (m) of the rendered planet. Geometry drops by d²/2R with
+     *  distance, so this sets how close the horizon feels: smaller = rounder
+     *  world, earlier reveal as the bee advances. Horizon ≈ √(2·R·eyeHeight). */
+    planetRadius: 400,
     /** Terrain chunk edge length (m). */
     chunkSize: 32,
     /** Plane subdivisions per chunk (verts = (n+1)^2). */
     chunkSegments: 16,
-    /** Chunk streaming radius in chunks around the bee. */
-    chunkRadius: 3,
+    /** Chunk streaming radius in chunks around the bee. Must reach past the
+     *  horizon so terrain rises into view instead of popping. */
+    chunkRadius: 5,
     /** Grid cell size used to group flowers into clusters (m). */
     clusterCell: 30,
   },
@@ -134,6 +140,9 @@ export const CONFIG = {
     maxPetals: 3,
     /** Clusters closer than this are "on screen enough" — no petal (m). */
     petalMinDist: 35,
+    /** Clusters farther than this are considered hidden below the horizon and
+     *  always get a petal, even when dead ahead (m). */
+    petalHorizonDist: 70,
   },
 
   fx: {

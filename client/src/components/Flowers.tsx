@@ -3,6 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { CONFIG } from "@pollen/shared";
 import type { Sim } from "../game/sim";
+import { curveMaterial } from "../lib/curvature";
 
 const dummy = new THREE.Object3D();
 const color = new THREE.Color();
@@ -24,10 +25,19 @@ export function Flowers({ sim }: { sim: Sim }) {
     stem.translate(0, 0.5, 0); // base at origin so scaling stretches upward
     return { head, stem };
   }, []);
+  const mats = useMemo(
+    () => ({
+      head: curveMaterial(new THREE.MeshLambertMaterial()),
+      stem: curveMaterial(new THREE.MeshLambertMaterial()),
+    }),
+    []
+  );
   useEffect(() => () => {
     geos.head.dispose();
     geos.stem.dispose();
-  }, [geos]);
+    mats.head.dispose();
+    mats.stem.dispose();
+  }, [geos, mats]);
 
   // Static stems: written once.
   useEffect(() => {
@@ -75,12 +85,16 @@ export function Flowers({ sim }: { sim: Sim }) {
 
   return (
     <>
-      <instancedMesh ref={stems} args={[geos.stem, undefined, count]} frustumCulled={false}>
-        <meshLambertMaterial />
-      </instancedMesh>
-      <instancedMesh ref={heads} args={[geos.head, undefined, count]} frustumCulled={false}>
-        <meshLambertMaterial />
-      </instancedMesh>
+      <instancedMesh
+        ref={stems}
+        args={[geos.stem, mats.stem, count]}
+        frustumCulled={false}
+      />
+      <instancedMesh
+        ref={heads}
+        args={[geos.head, mats.head, count]}
+        frustumCulled={false}
+      />
     </>
   );
 }

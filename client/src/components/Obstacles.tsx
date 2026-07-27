@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { Sim } from "../game/sim";
+import { curveMaterial } from "../lib/curvature";
 
 const dummy = new THREE.Object3D();
 const color = new THREE.Color();
@@ -26,10 +27,19 @@ export function Obstacles({ sim }: { sim: Sim }) {
     const leaf = new THREE.IcosahedronGeometry(1.3, 0);
     return { branch, leaf };
   }, []);
+  const mats = useMemo(
+    () => ({
+      branch: curveMaterial(new THREE.MeshLambertMaterial()),
+      leaf: curveMaterial(new THREE.MeshLambertMaterial()),
+    }),
+    []
+  );
   useEffect(() => () => {
     geos.branch.dispose();
     geos.leaf.dispose();
-  }, [geos]);
+    mats.branch.dispose();
+    mats.leaf.dispose();
+  }, [geos, mats]);
 
   useEffect(() => {
     branches.forEach((o, i) => {
@@ -59,12 +69,16 @@ export function Obstacles({ sim }: { sim: Sim }) {
 
   return (
     <>
-      <instancedMesh ref={branchRef} args={[geos.branch, undefined, Math.max(1, branches.length)]}>
-        <meshLambertMaterial />
-      </instancedMesh>
-      <instancedMesh ref={leafRef} args={[geos.leaf, undefined, Math.max(1, leaves.length)]}>
-        <meshLambertMaterial />
-      </instancedMesh>
+      <instancedMesh
+        ref={branchRef}
+        args={[geos.branch, mats.branch, Math.max(1, branches.length)]}
+        frustumCulled={false}
+      />
+      <instancedMesh
+        ref={leafRef}
+        args={[geos.leaf, mats.leaf, Math.max(1, leaves.length)]}
+        frustumCulled={false}
+      />
     </>
   );
 }

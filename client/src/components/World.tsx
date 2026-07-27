@@ -1,6 +1,8 @@
+import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import { CONFIG } from "@pollen/shared";
 import type { Sim } from "../game/sim";
+import { curveMaterial } from "../lib/curvature";
 import { GameLoop } from "./GameLoop";
 import { Terrain } from "./Terrain";
 import { Bee } from "./Bee";
@@ -15,15 +17,24 @@ import { Particles } from "./Particles";
 function Hive({ sim }: { sim: Sim }) {
   const { x, z } = sim.map.hive;
   const y = sim.heightAt(x, z);
+  const mats = useMemo(
+    () => ({
+      body: curveMaterial(new THREE.MeshLambertMaterial({ color: "#c98f2e" })),
+      hole: curveMaterial(new THREE.MeshBasicMaterial({ color: "#3a2a10" })),
+    }),
+    []
+  );
+  useEffect(() => () => {
+    mats.body.dispose();
+    mats.hole.dispose();
+  }, [mats]);
   return (
     <group position={[x, y, z]}>
-      <mesh position={[0, 1.1, 0]} scale={[1.2, 1.5, 1.2]}>
+      <mesh position={[0, 1.1, 0]} scale={[1.2, 1.5, 1.2]} material={mats.body}>
         <sphereGeometry args={[1, 10, 8]} />
-        <meshLambertMaterial color="#c98f2e" />
       </mesh>
-      <mesh position={[0, 0.7, 1.05]}>
+      <mesh position={[0, 0.7, 1.05]} material={mats.hole}>
         <circleGeometry args={[0.32, 10]} />
-        <meshBasicMaterial color="#3a2a10" />
       </mesh>
     </group>
   );

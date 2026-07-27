@@ -4,6 +4,7 @@ import * as THREE from "three";
 import { CONFIG } from "@pollen/shared";
 import type { Sim } from "../game/sim";
 import { fbm } from "../lib/noise";
+import { curveMaterial } from "../lib/curvature";
 
 const SIZE = CONFIG.world.chunkSize;
 const SEG = CONFIG.world.chunkSegments;
@@ -20,7 +21,7 @@ export function Terrain({ sim }: { sim: Sim }) {
   const lastCheck = useRef(-1);
 
   const material = useMemo(
-    () => new THREE.MeshLambertMaterial({ vertexColors: true }),
+    () => curveMaterial(new THREE.MeshLambertMaterial({ vertexColors: true })),
     []
   );
 
@@ -55,6 +56,10 @@ export function Terrain({ sim }: { sim: Sim }) {
     }
     geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     geo.computeVertexNormals();
+    // Curvature shifts vertices down at distance; inflate the bounds so the
+    // frustum culler never drops a chunk that is still visible.
+    geo.computeBoundingSphere();
+    if (geo.boundingSphere) geo.boundingSphere.radius += 40;
     const mesh = new THREE.Mesh(geo, material);
     mesh.position.set(ox, 0, oz);
     return mesh;
