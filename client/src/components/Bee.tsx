@@ -49,9 +49,9 @@ export function Bee({ sim }: { sim: Sim }) {
           <meshLambertMaterial color="#f2b31f" />
         </mesh>
         {/* rear stripe */}
-        <mesh position={[0, 0, -0.26]} scale={[0.22, 0.2, 0.22]}>
+        <mesh position={[0, 0, -0.2]} scale={[0.17, 0.16, 0.2]}>
           <sphereGeometry args={[1, 8, 6]} />
-          <meshLambertMaterial color="#2a2318" />
+          <meshLambertMaterial color="#4a3a1c" />
         </mesh>
         {/* head */}
         <mesh position={[0, 0.05, 0.4]} scale={[0.16, 0.16, 0.16]}>

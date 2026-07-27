@@ -33,7 +33,14 @@ export function Beacons({ sim }: { sim: Sim }) {
       const m = mats.current[i];
       if (!m) return;
       const frac = Math.max(0, c.nectarLeft / Math.max(1, c.nectarMax));
-      m.opacity = CONFIG.fx.beaconMaxOpacity * frac;
+      // Fade out up close: beacons signal distant clusters, not nearby ones.
+      const dist = c.center.distanceTo(sim.pos);
+      const nearFade = THREE.MathUtils.clamp(
+        (dist - CONFIG.fx.beaconFadeNear * 0.5) / (CONFIG.fx.beaconFadeNear * 0.5),
+        0,
+        1
+      );
+      m.opacity = CONFIG.fx.beaconMaxOpacity * frac * nearFade;
     });
   });
 

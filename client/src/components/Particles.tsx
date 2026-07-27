@@ -6,6 +6,22 @@ import { fxBus } from "../game/fx";
 const MAX = 256;
 const tmpColor = new THREE.Color();
 
+/** Soft round sprite generated once on a tiny canvas — no asset needed. */
+function makeDotTexture(): THREE.Texture {
+  const c = document.createElement("canvas");
+  c.width = c.height = 32;
+  const ctx = c.getContext("2d")!;
+  const g = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+  g.addColorStop(0, "rgba(255,255,255,1)");
+  g.addColorStop(0.5, "rgba(255,255,255,0.6)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 32, 32);
+  const tex = new THREE.CanvasTexture(c);
+  tex.needsUpdate = true;
+  return tex;
+}
+
 /**
  * Pooled particle bursts (pollen puffs, collision debris). One Points draw.
  */
@@ -25,7 +41,14 @@ export function Particles() {
     g.setAttribute("color", new THREE.BufferAttribute(new Float32Array(MAX * 3), 3));
     return g;
   }, []);
-  useEffect(() => () => geo.dispose(), [geo]);
+  const dotTex = useMemo(makeDotTexture, []);
+  useEffect(
+    () => () => {
+      geo.dispose();
+      dotTex.dispose();
+    },
+    [geo, dotTex]
+  );
 
   useEffect(() => {
     fxBus.spawn = (p, colorHex, count = 20) => {
@@ -78,10 +101,11 @@ export function Particles() {
   return (
     <points ref={points} geometry={geo} frustumCulled={false}>
       <pointsMaterial
-        size={0.3}
+        size={0.25}
+        map={dotTex}
         vertexColors
         transparent
-        opacity={0.95}
+        opacity={0.9}
         depthWrite={false}
         blending={THREE.AdditiveBlending}
         sizeAttenuation

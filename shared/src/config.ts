@@ -88,20 +88,23 @@ export const CONFIG = {
   } as Record<string, { color: string; stemHeight: number; headScale: number; nectarMult: number }>,
 
   camera: {
-    /** Chase distance behind the bee (m). */
-    back: 7,
+    /** Vertical field of view (degrees). Narrow = telephoto, less world on screen. */
+    fov: 42,
+    /** Chase distance behind the bee (m). Near-first-person, bee stays visible. */
+    back: 3.6,
     /** Height above the bee (m). Fixed pitch: altitude = scouting information. */
-    up: 3.2,
+    up: 1.4,
     /** Look-at point ahead of the bee (m) — keeps horizon high on screen. */
-    lookAhead: 8,
+    lookAhead: 9,
     /** Position lerp stiffness (1/s). Higher = snappier follow. */
     lerp: 4.5,
   },
 
   fog: {
-    near: 35,
-    /** Draw distance. Fog-limited to keep the horizon reveal cheap. */
-    far: 150,
+    near: 18,
+    /** Draw distance. Tight on purpose: only nearby flowers are visible; the
+     *  rest hide over the horizon and are revealed as the bee approaches. */
+    far: 70,
   },
 
   world: {
@@ -110,7 +113,7 @@ export const CONFIG = {
     /** Plane subdivisions per chunk (verts = (n+1)^2). */
     chunkSegments: 16,
     /** Chunk streaming radius in chunks around the bee. */
-    chunkRadius: 5,
+    chunkRadius: 3,
     /** Grid cell size used to group flowers into clusters (m). */
     clusterCell: 30,
   },
@@ -135,9 +138,12 @@ export const CONFIG = {
 
   fx: {
     /** In-world beacon shaft max opacity (scaled by remaining nectar). */
-    beaconMaxOpacity: 0.1,
+    beaconMaxOpacity: 0.06,
     beaconHeight: 34,
     beaconRadius: 1.1,
+    /** Beacons fade out within this distance of the bee (they guide from afar;
+     *  up close they'd fill the near-first-person camera). */
+    beaconFadeNear: 35,
   },
 
   perf: {
