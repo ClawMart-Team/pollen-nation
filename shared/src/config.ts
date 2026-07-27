@@ -94,9 +94,12 @@ export const CONFIG = {
     /** Chase distance behind the bee (m). Near-first-person, bee stays visible. */
     back: 3.6,
     /** Height above the bee (m). Fixed pitch: altitude = scouting information. */
-    up: 1.4,
+    up: 1.2,
     /** Look-at point ahead of the bee (m) — keeps horizon high on screen. */
     lookAhead: 9,
+    /** How far BELOW the bee the look-at point sits (m). Pitches the view
+     *  down, framing the bee high on screen with more map visible below it. */
+    lookDown: 4.0,
     /** Position lerp stiffness (1/s). Higher = snappier follow. */
     lerp: 4.5,
   },

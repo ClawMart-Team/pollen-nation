@@ -80,7 +80,7 @@ export function GameLoop({ sim }: { sim: Sim }) {
       camera.position.lerp(camPos, 1 - Math.exp(-CONFIG.camera.lerp * dt));
     }
     camTarget.copy(sim.pos).addScaledVector(fwd, CONFIG.camera.lookAhead);
-    camTarget.y = sim.pos.y + 0.5;
+    camTarget.y = sim.pos.y - CONFIG.camera.lookDown;
     camera.lookAt(camTarget);
 
     // --- Throttled HUD + compass petals. ---
