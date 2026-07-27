@@ -82,14 +82,13 @@ app.post("/api/level-complete", (req, res) => {
   res.json({ ok: true, progress: progressFor(userId) });
 });
 
-// Serve the built client in production (local `npm start`; on Vercel the
-// static build is served by the CDN and only /api/* reaches this function).
-const clientDist = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "client", "dist");
-app.use(express.static(clientDist));
-
-// Vercel imports this app as a serverless handler; only bind a port when
-// running as a normal long-lived process (local dev / `npm start`).
+// Serve the built client only when running as a normal long-lived process
+// (local `npm start`). On Vercel the static build is served by the CDN and
+// only /api/* reaches this function, so we must NOT touch import.meta.url /
+// the filesystem at module load there (it can throw and crash the function).
 if (!process.env.VERCEL) {
+  const clientDist = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "client", "dist");
+  app.use(express.static(clientDist));
   const port = Number(process.env.PORT) || 3001;
   app.listen(port, () => console.log(`Pollinator server on http://localhost:${port}`));
 }
