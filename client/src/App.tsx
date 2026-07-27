@@ -3,6 +3,7 @@ import { useGame } from "./state/store";
 import { GameCanvas } from "./components/GameCanvas";
 import { HUD } from "./components/HUD";
 import { MenuScreen, LoadingScreen, SummaryScreen, TutorialOverlay, PauseScreen } from "./components/Screens";
+import { JuiceFlash } from "./components/JuiceFlash";
 import { bindInput } from "./game/input";
 import { ensureAudio } from "./game/audio";
 
@@ -39,6 +40,7 @@ export default function App() {
         <>
           {/* transparent input layer above the canvas, below the HUD */}
           <div ref={inputRef} className="input-layer" />
+          <JuiceFlash />
           <HUD />
           <TutorialOverlay />
           {paused && <PauseScreen />}

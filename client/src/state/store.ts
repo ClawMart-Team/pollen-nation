@@ -17,7 +17,7 @@ export interface HudData {
 }
 
 export interface Summary {
-  reason: "time" | "energy";
+  reason: "time" | "energy" | "goal";
   score: number;
   pollinated: number;
   best: number;
@@ -38,16 +38,19 @@ interface GameStore {
   summary: Summary | null;
   error: string | null;
   paused: boolean;
+  /** Sim advances only once the player is ready (tutorial dismissed). */
+  ready: boolean;
 
   boot(): Promise<void>;
   switchUser(id: string): Promise<void>;
   startLevel(n: number): Promise<void>;
-  endLevel(reason: "time" | "energy"): void;
+  endLevel(reason: "time" | "energy" | "goal"): void;
   setHud(h: HudData): void;
   toMenu(): void;
   bumpPollinationTotal(): void;
   pause(): void;
   resume(): void;
+  beginPlay(): void;
 }
 
 const emptyHud: HudData = {
@@ -70,6 +73,7 @@ export const useGame = create<GameStore>((set, get) => ({
   summary: null,
   error: null,
   paused: false,
+  ready: true,
 
   async boot() {
     try {
@@ -103,10 +107,14 @@ export const useGame = create<GameStore>((set, get) => ({
       const { map, pollinatedFlowerIds } = await fetchLevel(n);
       const sim = createSim(map, pollinatedFlowerIds);
       resetInput();
+      // New players read the controls first: the tutorial overlay freezes the
+      // sim until dismissed. Returning players (tutorial seen) start moving now.
+      const ready = localStorage.getItem("pollinator_tut") === "1";
       set({
         map,
         sim,
         phase: "playing",
+        ready,
         hud: {
           ...emptyHud,
           energy: sim.energy,
@@ -158,6 +166,11 @@ export const useGame = create<GameStore>((set, get) => ({
   resume() {
     resetInput(); // drop any taps/steering queued while the overlay was up
     set({ paused: false });
+  },
+
+  beginPlay() {
+    resetInput(); // don't let the dismissing tap flap the bee
+    set({ ready: true });
   },
 
   bumpPollinationTotal() {

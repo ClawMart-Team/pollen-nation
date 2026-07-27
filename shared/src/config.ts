@@ -17,21 +17,22 @@ export const CONFIG = {
     maxRiseSpeed: 7,
     /** How long the tap must be held (after the initial flap) before the bee
      *  tucks into a dive (s). Roughly one wing-flap beat. */
-    diveDelaySec: 0.22,
+    diveDelaySec: 0.1,
     /** Downward acceleration while diving (m/s^2), on top of gravity. */
-    diveAccel: 22,
+    diveAccel: 36,
     /** Max downward speed while diving (m/s). Overrides the glide cap. */
-    maxDiveSpeed: 16,
+    maxDiveSpeed: 18,
     /** Energy cost per flap. */
-    flapEnergyCost: 0,
+    flapEnergyCost: 0.35,
     /** Passive energy drain per second (may be 0). Hovering isn't free. */
-    passiveDrainPerSec: 0,
+    passiveDrainPerSec: 0.1,
     /** Max turn rate at a full-edge tap (rad/s). */
-    turnRateMax: 1.7,
+    turnRateMax: 2.6,
     /** Fraction of half-screen-width around centre that steers straight. */
-    steerDeadZone: 0.12,
-    /** Steering response exponent: >1 softens small offsets, sharpens edges. */
-    steerCurveExp: 1.5,
+    steerDeadZone: 0.1,
+    /** Steering response exponent: >1 softens small offsets, sharpens edges.
+     *  Near 1 makes the turn track tap position almost proportionally. */
+    steerCurveExp: 1.05,
     /** How fast steering input decays back to 0 after the finger lifts (1/s). */
     steerReleaseDecay: 3.0,
     /** Visual bank roll at max turn (radians). */
@@ -39,7 +40,7 @@ export const CONFIG = {
     /** Hover clearance kept above the terrain surface (m). */
     minAltitude: 0.45,
     /** Energy penalty when the bee skims the terrain (soft floor, not fatal). */
-    terrainSkimEnergyCost: 0,
+    terrainSkimEnergyCost: 1.5,
     /** Upward bounce velocity applied on a terrain skim (m/s). */
     terrainSkimBounce: 3.0,
     /** Cooldown between terrain-skim penalties (s) so a long skid isn't ruinous. */

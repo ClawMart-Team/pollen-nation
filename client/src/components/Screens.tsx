@@ -131,6 +131,7 @@ export function PauseScreen() {
 /** First-run tutorial overlay; dismissed once, remembered in localStorage. */
 export function TutorialOverlay() {
   const [seen, setSeen] = useState(() => localStorage.getItem("pollinator_tut") === "1");
+  const beginPlay = useGame((s) => s.beginPlay);
   if (seen) return null;
   return (
     <div
@@ -138,6 +139,7 @@ export function TutorialOverlay() {
       onPointerDown={() => {
         localStorage.setItem("pollinator_tut", "1");
         setSeen(true);
+        beginPlay(); // release the frozen bee now that the controls were read
       }}
     >
       <div className="tutorial-card">

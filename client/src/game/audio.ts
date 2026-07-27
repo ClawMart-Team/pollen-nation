@@ -60,6 +60,19 @@ export function onPollinate(): void {
   setTimeout(() => blip(1320, 0.3, "sine", 0.12), 90);
 }
 
+/** Rising sparkle while sipping; pitch climbs as the quota fills (progress01). */
+export function onSip(progress01: number): void {
+  const jitter = (Math.random() - 0.5) * 40;
+  blip(660 + progress01 * 760 + jitter, 0.07, "sine", 0.045);
+}
+
+/** Little ascending fanfare when the day's quota is met. */
+export function onGoal(): void {
+  [660, 880, 1180, 1560].forEach((f, i) =>
+    setTimeout(() => blip(f, 0.4, "sine", 0.14), i * 110)
+  );
+}
+
 export function onLand(): void {
   blip(520, 0.12, "triangle", 0.08);
 }

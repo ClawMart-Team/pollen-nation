@@ -244,6 +244,62 @@ body,
   color: #8be08b;
 }
 
+/* ---------- Nectar juice ---------- */
+.hud-stat.nectar {
+  text-shadow: 0 0 6px rgba(255, 209, 74, 0.0);
+  transition: text-shadow 0.25s ease-out;
+}
+.hud-stat.nectar.met {
+  text-shadow: 0 0 10px rgba(139, 224, 139, 0.6);
+}
+
+/* Pops each time the whole-number nectar count ticks up (key remount). */
+.nectar-pop {
+  display: inline-block;
+  color: #ffe37a;
+  animation: nectar-pop 0.34s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+@keyframes nectar-pop {
+  0% {
+    transform: scale(1.7);
+    filter: brightness(1.9);
+  }
+  60% {
+    transform: scale(0.94);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+.nectar-bar {
+  height: 5px;
+  margin: 3px 0 4px auto;
+  width: 76%;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.nectar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #ffcf3a, #ffe888);
+  box-shadow: 0 0 6px rgba(255, 207, 58, 0.8);
+  transition: width 0.2s ease-out;
+}
+
+/* Full-screen golden flash on pollination / quota (opacity driven by JS). */
+.juice-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  mix-blend-mode: screen;
+  z-index: 5;
+}
+
 .summary-grid > div:nth-child(even) {
   text-align: right;
   font-weight: 800;

@@ -33,7 +33,7 @@ export type SimEvent =
   | { type: "tookOff" }
   | { type: "pollinated"; flowerIdx: number }
   | { type: "terrainSkim" }
-  | { type: "ended"; reason: "time" | "energy" };
+  | { type: "ended"; reason: "time" | "energy" | "goal" };
 
 export type BeeMode = "flying" | "perched" | "dying" | "done";
 
@@ -61,6 +61,8 @@ export interface Sim {
   skimCooldown: number;
   takeoffGrace: number;
   dieT: number;
+  /** Why the flight ended, once it has (drives the summary). */
+  endReason: "time" | "energy" | "goal" | null;
   /** Seconds the current tap has been held (for dive engagement). */
   holdT: number;
   /** Wing-flap animation trigger timestamp (sim time). */
@@ -138,7 +140,7 @@ export function createSim(map: MapData, pollinatedIds: string[]): Sim {
 
   const hiveY = heightAt(map.hive.x, map.hive.z);
   const dayLength = map.difficulty.dayLengthSec || CONFIG.day.defaultLengthSec;
-  const energyMax = map.difficulty.energyBudget || CONFIG.day.defaultEnergy;
+  const energyMax = (map.difficulty.energyBudget || CONFIG.day.defaultEnergy) * 3;
   const nectarGoal = map.difficulty.nectarGoal ?? nectarGoalForLevel(map.difficulty.level);
 
   return {
@@ -162,6 +164,7 @@ export function createSim(map: MapData, pollinatedIds: string[]): Sim {
     skimCooldown: 0,
     takeoffGrace: 0,
     dieT: 0,
+    endReason: null,
     holdT: 0,
     lastFlapAt: -10,
     t: 0,
@@ -207,11 +210,12 @@ function findLandableFlower(sim: Sim): number {
   return best;
 }
 
-function endFlight(sim: Sim, reason: "time" | "energy"): void {
+function endFlight(sim: Sim, reason: "time" | "energy" | "goal"): void {
   if (sim.mode === "dying" || sim.mode === "done") return;
   sim.mode = "dying";
   sim.perchedFlower = -1;
-  sim.dieT = reason === "time" ? 0.6 : CONFIG.ending.driftSec;
+  sim.endReason = reason;
+  sim.dieT = reason === "energy" ? CONFIG.ending.driftSec : 0.6;
   sim.events.push({ type: "ended", reason });
 }
 
@@ -258,6 +262,8 @@ export function stepSim(sim: Sim, dt: number, inp: InputState): void {
         sim.energy = Math.min(sim.energyMax, sim.energy + sip * FL.energyPerNectar);
         if (f.clusterIdx >= 0) sim.clusters[f.clusterIdx].nectarLeft -= sip;
         sim.sipRate = rate;
+        // Goal reached: the day's quota is met, end the run in triumph.
+        if (sim.nectar >= sim.nectarGoal) endFlight(sim, "goal");
       } else {
         sim.sipRate = 0;
       }

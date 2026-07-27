@@ -51,9 +51,22 @@ export function HUD() {
           <div className="hud-time">{mm}:{ss}</div>
         </div>
         <div className="hud-right">
-          <div className={`hud-stat${nectarMet ? " met" : ""}`}>
-            🍯 {Math.floor(hud.nectar)}{goal > 0 ? ` / ${goal}` : ""}{nectarMet ? " ✓" : ""}
+          <div className={`hud-stat nectar${nectarMet ? " met" : ""}`}>
+            🍯{" "}
+            <span key={Math.floor(hud.nectar)} className="nectar-pop">
+              {Math.floor(hud.nectar)}
+            </span>
+            {goal > 0 ? ` / ${goal}` : ""}
+            {nectarMet ? " ✓" : ""}
           </div>
+          {goal > 0 && (
+            <div className="nectar-bar">
+              <div
+                className="nectar-fill"
+                style={{ width: `${Math.min(1, hud.nectar / goal) * 100}%` }}
+              />
+            </div>
+          )}
           <div className="hud-stat">
             🌸 {hud.pollinatedSession}
             {progress ? ` · ${progress.pollinationTotal}` : ""}
