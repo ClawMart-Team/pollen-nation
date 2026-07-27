@@ -35,12 +35,13 @@ ${SCHEMA_DESCRIPTION}`;
 async function callLLM(prompt: string): Promise<string> {
   const base = process.env.LLM_BASE_URL || "https://api.openai.com/v1";
   const model = process.env.LLM_MODEL || "gpt-4o-mini";
+  // Local OpenAI-compatible servers (Ollama, LM Studio, llama.cpp) need no key.
+  const key = process.env.LLM_API_KEY || process.env.OPENAI_API_KEY;
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (key) headers.authorization = `Bearer ${key}`;
   const res = await fetch(`${base}/chat/completions`, {
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-    },
+    headers,
     body: JSON.stringify({
       model,
       response_format: { type: "json_object" },
@@ -55,13 +56,21 @@ async function callLLM(prompt: string): Promise<string> {
   return content;
 }
 
+/** LLM generation is enabled by EITHER an API key (hosted) or a custom base
+ *  URL (local server such as Ollama — no key required). */
+export function llmConfigured(): boolean {
+  return Boolean(
+    process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || process.env.LLM_BASE_URL
+  );
+}
+
 /**
  * LLM map generation with strict zod validation. On validation failure, retry
  * once with the error fed back; on second failure, throw (caller falls back to
  * the procedural generator).
  */
 export async function generateLLMMap(d: DifficultyInputs): Promise<MapData> {
-  if (!process.env.OPENAI_API_KEY) throw new Error("no LLM key configured");
+  if (!llmConfigured()) throw new Error("no LLM configured");
   let prompt = buildPrompt(d);
   let lastErr = "";
   for (let attempt = 0; attempt < 2; attempt++) {

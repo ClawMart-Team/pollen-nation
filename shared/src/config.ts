@@ -114,7 +114,7 @@ export const CONFIG = {
      *  world, earlier reveal as the bee advances. Horizon ≈ √(2·R·eyeHeight):
      *  at R=180 the horizon sits ~30 m away at cruise height and climbing to
      *  the ceiling scouts ~100 m — a dramatic "small planet" feel. */
-    planetRadius: 180,
+    planetRadius: 40,
     /** Terrain chunk edge length (m). */
     chunkSize: 32,
     /** Plane subdivisions per chunk (verts = (n+1)^2). */

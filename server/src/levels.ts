@@ -2,7 +2,7 @@ import { MapDataSchema, type MapData } from "@pollen/shared";
 import { stmts } from "./db.js";
 import { computeDifficulty } from "./difficulty.js";
 import { generateProceduralMap } from "./procedural.js";
-import { generateLLMMap } from "./llm.js";
+import { generateLLMMap, llmConfigured } from "./llm.js";
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
@@ -64,7 +64,7 @@ async function generate(levelNum: number): Promise<MapData> {
     map = await generateLLMMap(d);
   } catch (err) {
     // Fallback: deterministic procedural generator emitting the same schema.
-    if (process.env.OPENAI_API_KEY) {
+    if (llmConfigured()) {
       console.warn(`[levels] LLM generation failed for level ${levelNum}, using procedural:`, err);
     }
     map = generateProceduralMap(d);
