@@ -21,7 +21,7 @@ export function GameCanvas({ sim }: { sim: Sim }) {
       shadows={false}
       style={{ position: "absolute", inset: 0, touchAction: "none" }}
     >
-      <World sim={sim} />
+      <World key={runKey} sim={sim} />
     </Canvas>
   );
 }
