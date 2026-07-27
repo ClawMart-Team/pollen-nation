@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { CONFIG, type MapData, type FlowerDef, type ObstacleDef } from "@pollen/shared";
+import { CONFIG, type MapData, type FlowerDef } from "@pollen/shared";
 import { makeHeightSampler, type HeightSampler } from "../lib/noise";
 import type { InputState } from "./input";
 
@@ -19,16 +19,6 @@ export interface RuntimeFlower {
   clusterIdx: number;
 }
 
-export interface RuntimeObstacle {
-  def: ObstacleDef;
-  /** Centre position, terrain-resolved. */
-  pos: THREE.Vector3;
-  /** Branch axis (horizontal unit vector); unused for leaf clusters. */
-  axis: THREE.Vector3;
-  halfLen: number;
-  radius: number;
-}
-
 export interface Cluster {
   center: THREE.Vector3;
   flowerIdxs: number[];
@@ -39,7 +29,6 @@ export interface Cluster {
 
 export type SimEvent =
   | { type: "flap" }
-  | { type: "collision"; obstacle: "branch" | "leafCluster"; pos: THREE.Vector3 }
   | { type: "landed"; flowerIdx: number }
   | { type: "tookOff" }
   | { type: "pollinated"; flowerIdx: number }
@@ -67,8 +56,6 @@ export interface Sim {
   pollinatedThisRun: number;
   perchedFlower: number;
   sipRate: number;
-  stunT: number;
-  invulnT: number;
   skimCooldown: number;
   takeoffGrace: number;
   dieT: number;
@@ -76,7 +63,6 @@ export interface Sim {
   lastFlapAt: number;
   t: number;
   flowers: RuntimeFlower[];
-  obstacles: RuntimeObstacle[];
   clusters: Cluster[];
   events: SimEvent[];
   bounds: { halfX: number; maxZ: number };
@@ -87,30 +73,10 @@ export interface Sim {
 // ---------------------------------------------------------------------------
 
 const F = CONFIG.flight;
-const C = CONFIG.collisions;
 const FL = CONFIG.flowers;
 
-const obstacleGrid = new Map<string, number[]>();
 const GRID_CELL = 16;
 const gkey = (cx: number, cz: number) => cx + "," + cz;
-
-function buildObstacleGrid(obstacles: RuntimeObstacle[]): void {
-  obstacleGrid.clear();
-  obstacles.forEach((o, i) => {
-    const reach = o.def.type === "branch" ? o.halfLen + o.radius : o.radius;
-    const minX = Math.floor((o.pos.x - reach) / GRID_CELL);
-    const maxX = Math.floor((o.pos.x + reach) / GRID_CELL);
-    const minZ = Math.floor((o.pos.z - reach) / GRID_CELL);
-    const maxZ = Math.floor((o.pos.z + reach) / GRID_CELL);
-    for (let cx = minX; cx <= maxX; cx++)
-      for (let cz = minZ; cz <= maxZ; cz++) {
-        const k = gkey(cx, cz);
-        let arr = obstacleGrid.get(k);
-        if (!arr) obstacleGrid.set(k, (arr = []));
-        arr.push(i);
-      }
-  });
-}
 
 const flowerGrid = new Map<string, number[]>();
 
@@ -142,18 +108,6 @@ export function createSim(map: MapData, pollinatedIds: string[]): Sim {
     };
   });
 
-  const obstacles: RuntimeObstacle[] = map.obstacles.map((def) => {
-    const y = heightAt(def.x, def.z) + def.yOffset;
-    const isBranch = def.type === "branch";
-    return {
-      def,
-      pos: new THREE.Vector3(def.x, y, def.z),
-      axis: new THREE.Vector3(Math.cos(def.rotY), 0, -Math.sin(def.rotY)),
-      halfLen: isBranch ? 4 * def.scale : 0,
-      radius: isBranch ? 0.35 * def.scale : 1.3 * def.scale,
-    };
-  });
-
   // Group flowers into clusters on a coarse grid (beacons + compass petals).
   const cell = CONFIG.world.clusterCell;
   const byCell = new Map<string, number[]>();
@@ -176,7 +130,6 @@ export function createSim(map: MapData, pollinatedIds: string[]): Sim {
     clusters.push({ center, flowerIdxs: idxs, nectarMax: max, nectarLeft: max });
   }
 
-  buildObstacleGrid(obstacles);
   buildFlowerGrid(flowers);
 
   const hiveY = heightAt(map.hive.x, map.hive.z);
@@ -200,15 +153,12 @@ export function createSim(map: MapData, pollinatedIds: string[]): Sim {
     pollinatedThisRun: 0,
     perchedFlower: -1,
     sipRate: 0,
-    stunT: 0,
-    invulnT: 0,
     skimCooldown: 0,
     takeoffGrace: 0,
     dieT: 0,
     lastFlapAt: -10,
     t: 0,
     flowers,
-    obstacles,
     clusters,
     events: [],
     bounds: { halfX: map.terrain.sizeX / 2 - 4, maxZ: map.terrain.sizeZ - 4 },
@@ -226,32 +176,6 @@ function steerCurve(x: number): number {
   if (a <= dz) return 0;
   const t = Math.min(1, (a - dz) / (1 - dz));
   return Math.sign(x) * Math.pow(t, F.steerCurveExp);
-}
-
-const tmpA = new THREE.Vector3();
-const tmpB = new THREE.Vector3();
-
-function checkObstacleHit(sim: Sim): RuntimeObstacle | null {
-  const cx = Math.floor(sim.pos.x / GRID_CELL);
-  const cz = Math.floor(sim.pos.z / GRID_CELL);
-  for (let dx = -1; dx <= 1; dx++)
-    for (let dz = -1; dz <= 1; dz++) {
-      const arr = obstacleGrid.get(gkey(cx + dx, cz + dz));
-      if (!arr) continue;
-      for (const i of arr) {
-        const o = sim.obstacles[i];
-        if (o.def.type === "leafCluster") {
-          if (sim.pos.distanceToSquared(o.pos) < (o.radius + C.beeRadius) ** 2) return o;
-        } else {
-          // Sphere vs capsule: closest point on the branch segment.
-          tmpA.copy(sim.pos).sub(o.pos);
-          const t = THREE.MathUtils.clamp(tmpA.dot(o.axis), -o.halfLen, o.halfLen);
-          tmpB.copy(o.axis).multiplyScalar(t).add(o.pos);
-          if (sim.pos.distanceToSquared(tmpB) < (o.radius + C.beeRadius) ** 2) return o;
-        }
-      }
-    }
-  return null;
 }
 
 function findLandableFlower(sim: Sim): number {
@@ -297,7 +221,6 @@ export function stepSim(sim: Sim, dt: number, inp: InputState): void {
     }
   }
 
-  sim.invulnT = Math.max(0, sim.invulnT - dt);
   sim.skimCooldown = Math.max(0, sim.skimCooldown - dt);
   sim.takeoffGrace = Math.max(0, sim.takeoffGrace - dt);
 
@@ -339,11 +262,9 @@ export function stepSim(sim: Sim, dt: number, inp: InputState): void {
 
   // --- Flying / dying kinematics. ---
   const dying = sim.mode === "dying";
-  const stunned = sim.stunT > 0;
-  sim.stunT = Math.max(0, sim.stunT - dt);
 
   // Steering: hold sustains, release decays.
-  if (!dying && !stunned) {
+  if (!dying) {
     const target = inp.down ? steerCurve(inp.steerX) : 0;
     const k = inp.down ? 10 : F.steerReleaseDecay;
     sim.steer += (target - sim.steer) * Math.min(1, k * dt);
@@ -352,7 +273,7 @@ export function stepSim(sim: Sim, dt: number, inp: InputState): void {
   }
   // Screen-right tap (steer > 0) turns right: heading decreases (right of +Z is -X).
   sim.heading -= sim.steer * F.turnRateMax * dt;
-  const rollTarget = sim.steer * F.bankMaxRoll + (stunned ? Math.sin(sim.t * 25) * 0.6 : 0);
+  const rollTarget = sim.steer * F.bankMaxRoll;
   sim.roll += (rollTarget - sim.roll) * Math.min(1, 8 * dt);
 
   // Flaps.
@@ -375,10 +296,10 @@ export function stepSim(sim: Sim, dt: number, inp: InputState): void {
   if (!dying) sim.vel.y = Math.max(sim.vel.y, -F.glideFallSpeed);
 
   // Forward motion along heading.
-  const speedMult = dying ? 0.3 : stunned ? C.stunSpeedMult : 1;
+  const speedMult = dying ? 0.3 : 1;
   const fwd = F.baseSpeed * speedMult;
-  sim.vel.x = Math.sin(sim.heading) * fwd + (stunned ? sim.vel.x * 0.3 : 0);
-  sim.vel.z = Math.cos(sim.heading) * fwd + (stunned ? sim.vel.z * 0.3 : 0);
+  sim.vel.x = Math.sin(sim.heading) * fwd;
+  sim.vel.z = Math.cos(sim.heading) * fwd;
 
   sim.pos.addScaledVector(sim.vel, dt);
 
@@ -422,29 +343,6 @@ export function stepSim(sim: Sim, dt: number, inp: InputState): void {
     sim.energy = 0;
     endFlight(sim, "energy");
     return;
-  }
-
-  // Obstacles: energy hit + stun/knockback + brief invulnerability.
-  if (sim.invulnT <= 0) {
-    const hit = checkObstacleHit(sim);
-    if (hit) {
-      const cost = hit.def.type === "branch" ? C.branchEnergyCost : C.leafEnergyCost;
-      sim.energy = Math.max(0.01, sim.energy - cost); // punishing, never instantly fatal
-      sim.stunT = C.stunDurationSec;
-      sim.invulnT = C.invulnSec;
-      tmpA.copy(sim.pos).sub(hit.pos);
-      tmpA.y = 0;
-      if (tmpA.lengthSq() < 0.001) tmpA.set(1, 0, 0);
-      tmpA.normalize().multiplyScalar(C.knockbackSpeed);
-      sim.vel.x += tmpA.x;
-      sim.vel.z += tmpA.z;
-      sim.vel.y = Math.min(sim.vel.y, -1);
-      sim.events.push({ type: "collision", obstacle: hit.def.type, pos: hit.pos.clone() });
-      if (sim.energy <= 0.011) {
-        endFlight(sim, "energy");
-        return;
-      }
-    }
   }
 
   // Landing: forgiving proximity snap (landingMaxSpeed defaults above cruise).

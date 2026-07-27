@@ -42,23 +42,6 @@ export const CONFIG = {
     maxAltitude: 30,
   },
 
-  collisions: {
-    /** Bee collision sphere radius (m). */
-    beeRadius: 0.35,
-    /** Energy cost when striking a branch. */
-    branchEnergyCost: 8,
-    /** Energy cost when striking a leaf cluster (softer). */
-    leafEnergyCost: 4,
-    /** Stun duration after a hit (s): tumble, reduced forward speed. */
-    stunDurationSec: 0.7,
-    /** Forward speed multiplier while stunned. */
-    stunSpeedMult: 0.25,
-    /** Horizontal knockback speed away from the obstacle (m/s). */
-    knockbackSpeed: 5,
-    /** Post-hit invulnerability window (s) so one tangle can't drain the bee. */
-    invulnSec: 1.2,
-  },
-
   flowers: {
     /** Distance from a flower head within which the bee snaps to a perch (m).
      *  Deliberately generous: landing must feel good on a phone. */

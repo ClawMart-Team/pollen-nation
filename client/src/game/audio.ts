@@ -60,10 +60,6 @@ export function onPollinate(): void {
   setTimeout(() => blip(1320, 0.3, "sine", 0.12), 90);
 }
 
-export function onCollision(): void {
-  blip(90, 0.2, "square", 0.15);
-}
-
 export function onLand(): void {
   blip(520, 0.12, "triangle", 0.08);
 }

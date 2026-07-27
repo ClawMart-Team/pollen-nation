@@ -7,7 +7,6 @@ import { GameLoop } from "./GameLoop";
 import { Terrain } from "./Terrain";
 import { Bee } from "./Bee";
 import { Flowers } from "./Flowers";
-import { Obstacles } from "./Obstacles";
 import { SunSky } from "./SunSky";
 import { Beacons } from "./Beacons";
 import { Particles } from "./Particles";
@@ -51,7 +50,6 @@ export function World({ sim }: { sim: Sim }) {
       <Terrain sim={sim} />
       <Hive sim={sim} />
       <Flowers sim={sim} />
-      <Obstacles sim={sim} />
       <Beacons sim={sim} />
       <Bee sim={sim} />
       <Particles />

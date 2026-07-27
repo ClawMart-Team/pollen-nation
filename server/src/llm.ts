@@ -8,7 +8,6 @@ const SCHEMA_DESCRIPTION = `{
   "terrain": { "sizeX": number, "sizeZ": number, "ruggedness": number 0.5..20, "noiseScale": number 0.002..0.08 },
   "hive": { "x": number, "z": number },
   "flowers": [ { "id": string, "x": number, "z": number, "species": "daisy"|"tulip"|"bellflower"|"sunflower", "nectar": number 1..100, "size": number 0.5..2.5 } ],
-  "obstacles": [ { "id": string, "type": "branch"|"leafCluster", "x": number, "z": number, "yOffset": number 0.5..40, "rotY": number, "scale": number 0.4..4 } ],
   "difficulty": { "level": integer, "dayLengthSec": number, "energyBudget": number }
 }`;
 
@@ -22,11 +21,10 @@ Difficulty inputs you MUST honor:
 - terrain: sizeX=${d.sizeX}, sizeZ=${d.sizeZ}, ruggedness≈${d.ruggedness}
 - hive near z=24, x=0 (keep |x|<30)
 - ~${d.clusterCount} flower clusters totaling 60-200 flowers. Clusters are tight groups (radius 6-14). Place the nearest cluster ≈${d.minClusterDist}m from the hive and spread the rest progressively out to ≈${d.maxClusterDist}m, making FARTHER clusters RICHER (higher nectar). Average nectar per flower ≈${d.nectarPerFlower}.
-- ~${d.obstacleCount} obstacles (mix of branch and leafCluster), none within 25m of the hive or in a 14m-wide corridor extending 40m in +z from the hive. Branches at yOffset 2-12, varied rotY.
 - difficulty: { "level": ${d.level}, "dayLengthSec": ${d.dayLengthSec}, "energyBudget": ${d.energyBudget} }
 - levelId: "level-${d.level}", pick any integer seed.
 
-Choose an evocative theme (palette = terrain base hex, skyTint = sky hex) and give the level character: vary cluster shapes, species mixes per cluster, and obstacle arrangements (e.g. branch thickets guarding rich clusters).
+Choose an evocative theme (palette = terrain base hex, skyTint = sky hex) and give the level character: vary cluster shapes, sizes, and species mixes per cluster.
 
 Respond with ONLY a JSON object matching exactly this schema:
 ${SCHEMA_DESCRIPTION}`;

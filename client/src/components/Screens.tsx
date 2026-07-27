@@ -116,7 +116,7 @@ export function TutorialOverlay() {
         <p>👆 <b>Tap</b> to flap — climb costs energy.</p>
         <p>↔️ Tap <b>left / right</b> of the screen to steer. Hold to keep turning.</p>
         <p>🌸 Fly close to a flower to <b>land</b>. Sipping restores energy and scores nectar — but daylight keeps burning.</p>
-        <p>🌿 Avoid branches and leaves. Follow the light shafts to fresh flowers.</p>
+        <p>� Follow the light shafts over the horizon to fresh flowers.</p>
         <p className="footnote">(tap to start)</p>
       </div>
     </div>

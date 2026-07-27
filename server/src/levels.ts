@@ -23,19 +23,6 @@ export function sanitize(map: MapData): MapData {
     f.x = clamp(f.x, -halfX, halfX);
     f.z = clamp(f.z, 8, sizeZ - 8);
   }
-  for (const o of map.obstacles) {
-    o.x = clamp(o.x, -halfX, halfX);
-    o.z = clamp(o.z, 8, sizeZ - 8);
-  }
-
-  // No obstacles near the hive or inside its +z launch corridor.
-  const hx = map.hive.x, hz = map.hive.z;
-  map.obstacles = map.obstacles.filter((o) => {
-    const d2 = (o.x - hx) ** 2 + (o.z - hz) ** 2;
-    if (d2 < 25 * 25) return false;
-    const inCorridor = Math.abs(o.x - hx) < 7 && o.z > hz && o.z < hz + 40;
-    return !inCorridor;
-  });
 
   // Deduplicate ids.
   const seen = new Set<string>();

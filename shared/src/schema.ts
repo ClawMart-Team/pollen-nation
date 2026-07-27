@@ -33,18 +33,6 @@ export const FlowerSchema = z.object({
   size: z.number().min(0.5).max(2.5),
 });
 
-export const ObstacleSchema = z.object({
-  id: z.string().min(1),
-  type: z.enum(["branch", "leafCluster"]),
-  x: z.number(),
-  z: z.number(),
-  /** Height of the obstacle centre above local terrain. */
-  yOffset: z.number().min(0.5).max(40),
-  /** Yaw rotation in radians (branches lie mostly horizontal). */
-  rotY: z.number(),
-  scale: z.number().min(0.4).max(4),
-});
-
 export const DifficultySchema = z.object({
   level: z.number().int().min(1),
   dayLengthSec: z.number().min(30).max(600),
@@ -58,14 +46,12 @@ export const MapDataSchema = z.object({
   terrain: TerrainSchema,
   hive: z.object({ x: z.number(), z: z.number() }),
   flowers: z.array(FlowerSchema).min(1).max(1000),
-  obstacles: z.array(ObstacleSchema).max(1500),
   difficulty: DifficultySchema,
 });
 
 export type Theme = z.infer<typeof ThemeSchema>;
 export type TerrainParams = z.infer<typeof TerrainSchema>;
 export type FlowerDef = z.infer<typeof FlowerSchema>;
-export type ObstacleDef = z.infer<typeof ObstacleSchema>;
 export type Difficulty = z.infer<typeof DifficultySchema>;
 export type MapData = z.infer<typeof MapDataSchema>;
 

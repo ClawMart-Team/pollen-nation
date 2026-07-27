@@ -1,4 +1,4 @@
-import type { MapData, FlowerDef, ObstacleDef, SpeciesId } from "@pollen/shared";
+import type { MapData, FlowerDef, SpeciesId } from "@pollen/shared";
 import { SPECIES_IDS } from "@pollen/shared";
 import type { DifficultyInputs } from "./difficulty.js";
 
@@ -32,7 +32,6 @@ export function generateProceduralMap(d: DifficultyInputs): MapData {
 
   const hive = { x: 0, z: 24 };
   const flowers: FlowerDef[] = [];
-  const obstacles: ObstacleDef[] = [];
   const halfX = d.sizeX / 2 - 20;
 
   // Flower clusters: richer and progressively farther from the hive so the
@@ -64,23 +63,6 @@ export function generateProceduralMap(d: DifficultyInputs): MapData {
     }
   }
 
-  // Obstacles: branches with leaf clusters hanging nearby. Skip the hive's
-  // launch corridor (enforced again in sanity repair).
-  for (let i = 0; i < d.obstacleCount; i++) {
-    const x = (rnd() * 2 - 1) * halfX;
-    const z = 30 + rnd() * (d.sizeZ - 60);
-    const branch = rnd() < 0.6;
-    obstacles.push({
-      id: `o${i}`,
-      type: branch ? "branch" : "leafCluster",
-      x,
-      z,
-      yOffset: branch ? 2.5 + rnd() * 9 : 2 + rnd() * 10,
-      rotY: rnd() * Math.PI,
-      scale: 0.7 + rnd() * 1.3,
-    });
-  }
-
   return {
     levelId: `level-${d.level}`,
     seed,
@@ -93,7 +75,6 @@ export function generateProceduralMap(d: DifficultyInputs): MapData {
     },
     hive,
     flowers,
-    obstacles,
     difficulty: {
       level: d.level,
       dayLengthSec: d.dayLengthSec,

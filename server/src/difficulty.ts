@@ -6,8 +6,6 @@ export interface DifficultyInputs {
   level: number;
   dayLengthSec: number;
   energyBudget: number;
-  /** Approximate obstacle count. */
-  obstacleCount: number;
   /** Number of flower clusters. */
   clusterCount: number;
   /** Distance from hive to the nearest rich cluster (m). */
@@ -31,7 +29,6 @@ export function computeDifficulty(level: number): DifficultyInputs {
     level: n,
     dayLengthSec: clamp(120 + n * 12, 120, 300),
     energyBudget: clamp(100 + n * 5, 100, 220),
-    obstacleCount: clamp(30 + n * 14, 30, 400),
     clusterCount: clamp(7 + Math.floor(n * 1.2), 8, 26),
     minClusterDist: clamp(35 + n * 4, 35, 120),
     maxClusterDist: clamp(240 + n * 40, 280, 900),

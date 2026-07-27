@@ -51,11 +51,10 @@ All in [shared/src/config.ts](shared/src/config.ts):
    flower stops being worth sitting on.
 4. `flight.flapEnergyCost` + `day.defaultLengthSec` + map `energyBudget` —
    how far the frontier of fresh nectar can recede before the day is lost.
-5. `collisions.branchEnergyCost` / `stunDurationSec` — punishment level;
-   `invulnSec` keeps thickets from being fatal.
-6. `flowers.landingRadius` — bigger = more forgiving phone landings.
-7. `camera.up` / `camera.back` + `fog.far` — how much scouting reward extra
-   altitude buys (a deliberate design mechanic: climb to see farther).
+5. `flowers.landingRadius` — bigger = more forgiving phone landings.
+6. `camera.up` / `camera.back` + `world.planetRadius` — how much scouting
+   reward extra altitude buys (a deliberate design mechanic: climb to see
+   farther over the horizon).
 
 ## Notes
 

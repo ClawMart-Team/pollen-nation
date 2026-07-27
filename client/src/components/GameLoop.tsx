@@ -52,10 +52,6 @@ export function GameLoop({ sim }: { sim: Sim }) {
         case "landed":
           audio.onLand();
           break;
-        case "collision":
-          audio.onCollision();
-          fxBus.spawn(sim.pos, ev.obstacle === "branch" ? 0x8a6a42 : 0x5f9c48, 14);
-          break;
         case "terrainSkim":
           fxBus.spawn(sim.pos, 0xc9b98a, 8);
           break;
