@@ -3,7 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data");
+// Vercel (and most serverless hosts) have a read-only filesystem except for
+// /tmp, which is also ephemeral — fine for the demo deploy: progress and the
+// level cache simply reset on cold starts.
+const dir = process.env.VERCEL
+  ? path.join("/tmp", "pollen-data")
+  : path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data");
 fs.mkdirSync(dir, { recursive: true });
 
 export const db = new Database(path.join(dir, "pollen.sqlite"));

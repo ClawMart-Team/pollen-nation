@@ -1,8 +1,8 @@
 import { MapDataSchema, type MapData } from "@pollen/shared";
-import { stmts } from "./db.js";
-import { computeDifficulty } from "./difficulty.js";
-import { generateProceduralMap } from "./procedural.js";
-import { generateLLMMap, llmConfigured } from "./llm.js";
+import { stmts } from "./db";
+import { computeDifficulty } from "./difficulty";
+import { generateProceduralMap } from "./procedural";
+import { generateLLMMap, llmConfigured } from "./llm";
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 

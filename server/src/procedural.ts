@@ -1,6 +1,6 @@
 import type { MapData, FlowerDef, SpeciesId } from "@pollen/shared";
 import { SPECIES_IDS } from "@pollen/shared";
-import type { DifficultyInputs } from "./difficulty.js";
+import type { DifficultyInputs } from "./difficulty";
 
 /** Deterministic PRNG so a replayed level is identical. */
 export function mulberry32(seed: number) {

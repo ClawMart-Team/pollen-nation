@@ -2,8 +2,8 @@ import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { LevelResponse, ProgressResponse } from "@pollen/shared";
-import { stmts } from "./db.js";
-import { getLevel, prefetch } from "./levels.js";
+import { stmts } from "./db";
+import { getLevel, prefetch } from "./levels";
 
 const app = express();
 app.use(express.json());
@@ -76,9 +76,16 @@ app.post("/api/level-complete", (req, res) => {
   res.json({ ok: true, progress: progressFor(userId) });
 });
 
-// Serve the built client in production.
+// Serve the built client in production (local `npm start`; on Vercel the
+// static build is served by the CDN and only /api/* reaches this function).
 const clientDist = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "client", "dist");
 app.use(express.static(clientDist));
 
-const port = Number(process.env.PORT) || 3001;
-app.listen(port, () => console.log(`Pollinator server on http://localhost:${port}`));
+// Vercel imports this app as a serverless handler; only bind a port when
+// running as a normal long-lived process (local dev / `npm start`).
+if (!process.env.VERCEL) {
+  const port = Number(process.env.PORT) || 3001;
+  app.listen(port, () => console.log(`Pollinator server on http://localhost:${port}`));
+}
+
+export default app;

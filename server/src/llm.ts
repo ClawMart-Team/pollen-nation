@@ -1,5 +1,5 @@
 import { MapDataSchema, type MapData } from "@pollen/shared";
-import type { DifficultyInputs } from "./difficulty.js";
+import type { DifficultyInputs } from "./difficulty";
 
 const SCHEMA_DESCRIPTION = `{
   "levelId": string,
