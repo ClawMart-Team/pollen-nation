@@ -27,14 +27,19 @@ export function computeDifficulty(level: number): DifficultyInputs {
   const n = Math.max(1, Math.floor(level));
   return {
     level: n,
-    dayLengthSec: clamp(120 + n * 12, 120, 300),
-    energyBudget: clamp(8 + n * 0.4, 8, 16),
-    clusterCount: clamp(7 + Math.floor(n * 1.2), 8, 26),
-    minClusterDist: clamp(35 + n * 4, 35, 120),
-    maxClusterDist: clamp(240 + n * 40, 280, 900),
+    // Fixed per design: world size, day length, and energy never scale.
+    dayLengthSec: 150,
+    energyBudget: 8,
+    sizeX: 400,
+    sizeZ: 700,
+    // Difficulty comes from terrain and flower scarcity/distance instead:
+    // much hillier world…
+    ruggedness: clamp(3.5 + n * 2, 5, 20),
+    // …with fewer clusters…
+    clusterCount: clamp(12 - n, 4, 11),
+    // …whose nearest one keeps retreating from the hive.
+    minClusterDist: clamp(30 + n * 15, 45, 400),
+    maxClusterDist: 600,
     nectarPerFlower: clamp(14 - n * 0.4, 8, 14),
-    ruggedness: clamp(3.5 + n * 0.5, 3.5, 12),
-    sizeZ: clamp(420 + n * 50, 420, 1100),
-    sizeX: clamp(300 + n * 15, 300, 500),
   };
 }
