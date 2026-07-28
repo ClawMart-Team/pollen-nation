@@ -9,8 +9,6 @@ import { Bee } from "./Bee";
 import { Flowers } from "./Flowers";
 import { Grass } from "./Grass";
 import { SunSky } from "./SunSky";
-import { Beacons } from "./Beacons";
-import { ClusterRings } from "./ClusterRings";
 import { Particles } from "./Particles";
 
 /** The hive: home marker. Stretch hook (§4): returning here could "bank"
@@ -53,8 +51,6 @@ export function World({ sim }: { sim: Sim }) {
       <Hive sim={sim} />
       <Flowers sim={sim} />
       <Grass sim={sim} />
-      <Beacons sim={sim} />
-      <ClusterRings sim={sim} />
       <Bee sim={sim} />
       <Particles />
       <GameLoop sim={sim} />

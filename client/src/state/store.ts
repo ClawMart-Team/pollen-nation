@@ -1,31 +1,30 @@
 import { create } from "zustand";
 import type { MapData, ProgressResponse } from "@pollen/shared";
-import { fetchLevel, fetchProgress, postLevelComplete, getUserId, setUserId } from "../lib/api";
+import { fetchProgress, getUserId, setUserId } from "../lib/api";
 import { createSim, type Sim } from "../game/sim";
+import { generateSmallWorldMap } from "../game/smallworld";
 import { resetInput } from "../game/input";
 
 export type Phase = "boot" | "menu" | "loading" | "playing" | "summary";
 
 /** Throttled HUD snapshot — the only per-frame data that touches React. */
 export interface HudData {
-  energy: number;
-  energyMax: number;
+  score: number;
+  combo: number;
+  bestCombo: number;
   timeLeft: number;
   dayFrac: number;
-  nectar: number;
-  pollinatedSession: number;
 }
 
 export interface Summary {
-  reason: "time" | "energy" | "goal";
   score: number;
-  pollinated: number;
+  /** Longest same-type chain reached this run. */
+  bestCombo: number;
+  /** Best score ever (persisted locally). */
   best: number;
-  /** Nectar quota required to complete the level. */
-  goal: number;
-  /** Whether this run met the quota. */
-  passed: boolean;
 }
+
+const BEST_KEY = "smallworld_best_score";
 
 interface GameStore {
   phase: Phase;
@@ -44,22 +43,20 @@ interface GameStore {
   boot(): Promise<void>;
   switchUser(id: string): Promise<void>;
   startLevel(n: number): Promise<void>;
-  endLevel(reason: "time" | "energy" | "goal"): void;
+  endLevel(): void;
   setHud(h: HudData): void;
   toMenu(): void;
-  bumpPollinationTotal(): void;
   pause(): void;
   resume(): void;
   beginPlay(): void;
 }
 
 const emptyHud: HudData = {
-  energy: 0,
-  energyMax: 1,
+  score: 0,
+  combo: 0,
+  bestCombo: 0,
   timeLeft: 0,
   dayFrac: 0,
-  nectar: 0,
-  pollinatedSession: 0,
 };
 
 export const useGame = create<GameStore>((set, get) => ({
@@ -103,50 +100,38 @@ export const useGame = create<GameStore>((set, get) => ({
 
   async startLevel(n: number) {
     set({ phase: "loading", levelNum: n, error: null, summary: null, paused: false });
-    try {
-      const { map, pollinatedFlowerIds } = await fetchLevel(n);
-      const sim = createSim(map, pollinatedFlowerIds);
-      resetInput();
-      // New players read the controls first: the tutorial overlay freezes the
-      // sim until dismissed. Returning players (tutorial seen) start moving now.
-      const ready = localStorage.getItem("pollinator_tut") === "1";
-      set({
-        map,
-        sim,
-        phase: "playing",
-        ready,
-        hud: {
-          ...emptyHud,
-          energy: sim.energy,
-          energyMax: sim.energyMax,
-          timeLeft: sim.timeLeft,
-        },
-      });
-    } catch (e) {
-      set({ phase: "menu", error: "Couldn't load the level. Is the server running?" });
-    }
+    // Small World generates its run entirely on the client — no server fetch.
+    const map = generateSmallWorldMap(n);
+    const sim = createSim(map);
+    resetInput();
+    // New players read the controls first: the tutorial overlay freezes the
+    // sim until dismissed. Returning players (tutorial seen) start moving now.
+    const ready = localStorage.getItem("pollinator_tut") === "1";
+    set({
+      map,
+      sim,
+      phase: "playing",
+      ready,
+      hud: {
+        ...emptyHud,
+        timeLeft: sim.timeLeft,
+      },
+    });
   },
 
-  endLevel(reason) {
-    const { sim, map, levelNum, progress } = get();
-    if (!sim || !map) return;
-    const score = Math.round(sim.nectar);
-    const goal = sim.nectarGoal;
-    const passed = score >= goal;
-    const prevBest = progress?.bestScores?.[levelNum] ?? 0;
+  endLevel() {
+    const { sim } = get();
+    if (!sim) return;
+    const prevBest = Number(localStorage.getItem(BEST_KEY) ?? 0);
+    const best = Math.max(prevBest, sim.score);
+    localStorage.setItem(BEST_KEY, String(best));
     set({
       phase: "summary",
       summary: {
-        reason,
-        score,
-        pollinated: sim.pollinatedThisRun,
-        best: passed ? Math.max(prevBest, score) : prevBest,
-        goal,
-        passed,
+        score: sim.score,
+        bestCombo: sim.bestCombo,
+        best,
       },
-    });
-    postLevelComplete(map.levelId, levelNum, score, sim.nectar).then((r) => {
-      if (r?.progress) set({ progress: r.progress });
     });
   },
 
@@ -164,17 +149,12 @@ export const useGame = create<GameStore>((set, get) => ({
   },
 
   resume() {
-    resetInput(); // drop any taps/steering queued while the overlay was up
+    resetInput(); // drop any taps queued while the overlay was up
     set({ paused: false });
   },
 
   beginPlay() {
-    resetInput(); // don't let the dismissing tap flap the bee
+    resetInput(); // don't let the dismissing tap trigger a hop
     set({ ready: true });
-  },
-
-  bumpPollinationTotal() {
-    const p = get().progress;
-    if (p) set({ progress: { ...p, pollinationTotal: p.pollinationTotal + 1 } });
   },
 }));

@@ -26,8 +26,8 @@ export function MenuScreen() {
           ))}
         </select>
       </div>
-      <h1 className="title">🐝 Pollinator</h1>
-      <p className="subtitle">Forage far. Fly home rich.</p>
+      <h1 className="title">🐝 Small World</h1>
+      <p className="subtitle">Hop the lanes. Chain the blooms.</p>
       {error && <p className="error">{error}</p>}
       <div className="level-picker">
         <button
@@ -46,11 +46,9 @@ export function MenuScreen() {
           ▶
         </button>
       </div>
-      {progress && progress.bestScores[picked] != null && (
-        <p className="subtitle">Best: {Math.round(progress.bestScores[picked])} nectar</p>
-      )}
+      <p className="subtitle">Best: {Number(localStorage.getItem("smallworld_best_score") ?? 0).toLocaleString()}</p>
       <button className="btn big" onClick={() => startLevel(picked)}>
-        Take flight
+        Start run
       </button>
       {progress && (
         <p className="footnote">🌸 {progress.pollinationTotal} flowers pollinated all-time</p>
@@ -69,39 +67,26 @@ export function LoadingScreen() {
 }
 
 export function SummaryScreen() {
-  const { summary, levelNum, progress, startLevel, toMenu } = useGame();
+  const { summary, levelNum, startLevel, toMenu } = useGame();
   if (!summary) return null;
-  const nextUnlocked = (progress?.levelsUnlocked ?? 1) > levelNum;
-  const title = summary.passed
-    ? "🏅 Quota met!"
-    : summary.reason === "time"
-      ? "🌇 Dusk falls"
-      : "😴 Out of energy";
+  const newBest = summary.score >= summary.best && summary.score > 0;
   return (
     <div className="screen">
-      <h1 className="title">{title}</h1>
+      <h1 className="title">🌇 Dusk falls</h1>
       <div className="summary-grid">
-        <div>Nectar</div>
-        <div className={summary.passed ? "pass" : "fail"}>
-          {summary.score} / {summary.goal}
-        </div>
-        <div>Pollinated</div>
-        <div>{summary.pollinated}</div>
+        <div>Score</div>
+        <div className="pass">{summary.score.toLocaleString()}</div>
+        <div>Best combo</div>
+        <div>×{summary.bestCombo}</div>
         <div>Best</div>
-        <div>{summary.best}</div>
+        <div>{summary.best.toLocaleString()}</div>
       </div>
-      {!summary.passed && (
-        <p className="error">
-          Collect at least {summary.goal} nectar to complete day {levelNum}.
-        </p>
-      )}
-      {summary.passed && nextUnlocked && (
-        <button className="btn big" onClick={() => startLevel(levelNum + 1)}>
-          Next day ▶
-        </button>
-      )}
+      {newBest && <p className="subtitle">🏅 New high score!</p>}
+      <button className="btn big" onClick={() => startLevel(levelNum + 1)}>
+        Next day ▶
+      </button>
       <button className="btn" onClick={() => startLevel(levelNum)}>
-        {summary.passed ? `Replay day ${levelNum}` : `Try day ${levelNum} again`}
+        Replay day {levelNum}
       </button>
       <button className="btn" onClick={toMenu}>
         Hive menu
@@ -144,10 +129,10 @@ export function TutorialOverlay() {
     >
       <div className="tutorial-card">
         <h2>How to bee</h2>
-        <p>👆 <b>Tap</b> to flap — climb costs energy.</p>
-        <p>↔️ Tap <b>left / right</b> of the screen to steer. Hold to keep turning.</p>
-        <p>🌸 Fly close to a flower to <b>land</b>. Sipping restores energy and scores nectar — but daylight keeps burning.</p>
-        <p>� Follow the light shafts over the horizon to fresh flowers.</p>
+        <p>� The world turns toward you — the bee flies forward on its own.</p>
+        <p>👈 Tap the <b>left</b> side to hop one lane left.</p>
+        <p>👉 Tap the <b>right</b> side to hop one lane right.</p>
+        <p>🌸 Land on the <b>same flower type</b> in a row to build a <b>combo</b> and score big.</p>
         <p className="footnote">(tap to start)</p>
       </div>
     </div>

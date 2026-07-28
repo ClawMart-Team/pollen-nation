@@ -58,6 +58,34 @@ body,
   margin-bottom: 4px;
 }
 
+.hud-score {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  animation: hud-score-pop 0.22s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+@keyframes hud-score-pop {
+  0% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+
+.hud-combo {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #ffe37a;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  animation: hud-combo-pop 0.24s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+
+@keyframes hud-combo-pop {
+  0% { transform: scale(1.4) rotate(-4deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
 .energy-bar {
   height: 10px;
   border-radius: 5px;
