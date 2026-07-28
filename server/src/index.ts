@@ -70,6 +70,15 @@ app.get("/api/progress", (req, res) => {
   res.json(progressFor(userId));
 });
 
+// POST /api/user/delete — DEBUG: wipe every record for {userId} across all
+// tables. Used by the on-screen name badge to reset a test account.
+app.post("/api/user/delete", (req, res) => {
+  const userId = asUserId(req.body?.userId);
+  if (!userId) return res.status(400).json({ error: "userId required" });
+  stmts.deleteUser.run(userId);
+  res.json({ ok: true });
+});
+
 // POST /api/level-complete — a run only counts if it met the level's nectar
 // quota (authoritative here); only then is the result recorded and the next
 // level unlocked. Returns pass/fail, the quota, and fresh progress.

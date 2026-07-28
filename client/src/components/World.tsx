@@ -1,5 +1,7 @@
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
+import { useGLTF } from "@react-three/drei";
+import { clone as skeletonClone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { CONFIG } from "@pollen/shared";
 import type { Sim } from "../game/sim";
 import { curveMaterial } from "../lib/curvature";
@@ -11,30 +13,67 @@ import { Grass } from "./Grass";
 import { SunSky } from "./SunSky";
 import { Particles } from "./Particles";
 
-/** The hive: home marker. Stretch hook (§4): returning here could "bank"
- *  nectar before dusk — the sim knows the hive position via sim.map.hive. */
+/** Target height (world units) of the hive model. */
+const HIVE_SIZE = 3.2;
+
+/** The hive: home marker, rendered from bee_hive.glb. The sim knows its
+ *  position via sim.map.hive (returning here before dusk is a win). */
 function Hive({ sim }: { sim: Sim }) {
   const { x, z } = sim.map.hive;
   const y = sim.heightAt(x, z);
-  const mats = useMemo(
-    () => ({
-      body: curveMaterial(new THREE.MeshLambertMaterial({ color: "#c98f2e" })),
-      hole: curveMaterial(new THREE.MeshBasicMaterial({ color: "#3a2a10" })),
-    }),
-    []
+  const gltf = useGLTF("/models/bee_hive.glb");
+
+  const model = useMemo(() => {
+    const root = skeletonClone(gltf.scene) as THREE.Object3D;
+
+    // Normalize: scale so the tallest axis is HIVE_SIZE, center on x/z, and
+    // rest the base on the ground (y = 0 at the model's bottom).
+    const box = new THREE.Box3().setFromObject(root);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const s = HIVE_SIZE / Math.max(size.x, size.y, size.z || 1);
+    root.scale.setScalar(s);
+    root.position.set(-center.x * s, -box.min.y * s, -center.z * s);
+
+    // Curve each material so the hive bends with the planet. Clone first so we
+    // don't mutate the cached GLTF materials shared by useGLTF. The GLB ships
+    // with no color data, so shade the whole hive a warm, matte cartoon-beehive
+    // yellow and drop metalness so it lights correctly without an env map.
+    const owned: THREE.Material[] = [];
+    const curve = (m: THREE.Material) => {
+      const src = m.clone();
+      const std = src as THREE.MeshStandardMaterial;
+      if (std.isMeshStandardMaterial) {
+        std.metalness = 0;
+        std.roughness = 0.85;
+        std.color.set("#e8a72c");
+      }
+      const c = curveMaterial(src);
+      owned.push(c);
+      return c;
+    };
+    root.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.castShadow = mesh.receiveShadow = false;
+      mesh.frustumCulled = false;
+      mesh.material = Array.isArray(mesh.material)
+        ? mesh.material.map(curve)
+        : curve(mesh.material as THREE.Material);
+    });
+    return { root, owned };
+  }, [gltf]);
+
+  useEffect(
+    () => () => {
+      for (const m of model.owned) m.dispose();
+    },
+    [model]
   );
-  useEffect(() => () => {
-    mats.body.dispose();
-    mats.hole.dispose();
-  }, [mats]);
+
   return (
     <group position={[x, y, z]}>
-      <mesh position={[0, 1.1, 0]} scale={[1.2, 1.5, 1.2]} material={mats.body}>
-        <sphereGeometry args={[1, 10, 8]} />
-      </mesh>
-      <mesh position={[0, 0.7, 1.05]} material={mats.hole}>
-        <circleGeometry args={[0.32, 10]} />
-      </mesh>
+      <primitive object={model.root} />
     </group>
   );
 }
@@ -57,3 +96,5 @@ export function World({ sim }: { sim: Sim }) {
     </>
   );
 }
+
+useGLTF.preload("/models/bee_hive.glb");

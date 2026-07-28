@@ -1,58 +1,46 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useGame } from "../state/store";
-import { DEBUG_USERS } from "../lib/api";
+
+/** Persistent top-right identity: the player's name with their current day
+ *  just beneath it. Stays visible across the menu, gameplay and summary.
+ *  Clicking the name is a debug shortcut to wipe this user's data. */
+export function PlayerBadge() {
+  const userId = useGame((s) => s.userId);
+  const levelNum = useGame((s) => s.levelNum);
+  const unlocked = useGame((s) => s.progress?.levelsUnlocked ?? 1);
+  const deleteAccount = useGame((s) => s.deleteAccount);
+  const day = Math.min(levelNum, unlocked);
+
+  const onDeleteAccount = () => {
+    if (window.confirm(`Delete all data for "${userId}"? This can't be undone.`)) {
+      void deleteAccount();
+    }
+  };
+
+  return (
+    <div className="player-badge">
+      <button
+        className="user-badge"
+        onClick={onDeleteAccount}
+        title="Debug: delete this user's data and start over"
+      >
+        {userId}
+      </button>
+      <span className="day-badge">Day {day}</span>
+    </div>
+  );
+}
 
 export function MenuScreen() {
-  const { progress, levelNum, startLevel, error, userId, switchUser } = useGame();
+  const { progress, levelNum, startLevel } = useGame();
   const unlocked = progress?.levelsUnlocked ?? 1;
-  const [picked, setPicked] = useState(levelNum);
-  useEffect(() => setPicked(Math.min(levelNum, unlocked)), [levelNum, unlocked]);
-
-  const users = DEBUG_USERS.includes(userId) ? DEBUG_USERS : [userId, ...DEBUG_USERS];
+  const day = Math.min(levelNum, unlocked);
 
   return (
     <div className="screen">
-      <div className="user-switch">
-        <label htmlFor="user-select">User</label>
-        <select
-          id="user-select"
-          value={userId}
-          onChange={(e) => switchUser(e.target.value)}
-        >
-          {users.map((u) => (
-            <option key={u} value={u}>
-              {u}
-            </option>
-          ))}
-        </select>
-      </div>
-      <h1 className="title">🐝 Small World</h1>
-      <p className="subtitle">Hop the lanes. Chain the blooms.</p>
-      {error && <p className="error">{error}</p>}
-      <div className="level-picker">
-        <button
-          className="btn small"
-          disabled={picked <= 1}
-          onClick={() => setPicked((p) => Math.max(1, p - 1))}
-        >
-          ◀
-        </button>
-        <span className="level-label">Day {picked}</span>
-        <button
-          className="btn small"
-          disabled={picked >= unlocked}
-          onClick={() => setPicked((p) => Math.min(unlocked, p + 1))}
-        >
-          ▶
-        </button>
-      </div>
-      <p className="subtitle">Best: {Number(localStorage.getItem("smallworld_best_score") ?? 0).toLocaleString()}</p>
-      <button className="btn big" onClick={() => startLevel(picked)}>
-        Start run
+      <button className="btn big" onClick={() => startLevel(day)}>
+        Play to win
       </button>
-      {progress && (
-        <p className="footnote">🌸 {progress.pollinationTotal} flowers pollinated all-time</p>
-      )}
     </div>
   );
 }
@@ -67,30 +55,22 @@ export function LoadingScreen() {
 }
 
 export function SummaryScreen() {
-  const { summary, levelNum, startLevel, toMenu } = useGame();
+  const { summary, levelNum, startLevel } = useGame();
   if (!summary) return null;
-  const newBest = summary.score >= summary.best && summary.score > 0;
+  // Reaching the hive ("home") means the level was completed; otherwise the run
+  // ended early (dusk or a crash) and the player retries the same level.
+  const completed = summary.reason === "home";
   return (
     <div className="screen">
-      <h1 className="title">🌇 Dusk falls</h1>
-      <div className="summary-grid">
-        <div>Score</div>
-        <div className="pass">{summary.score.toLocaleString()}</div>
-        <div>Best combo</div>
-        <div>×{summary.bestCombo}</div>
-        <div>Best</div>
-        <div>{summary.best.toLocaleString()}</div>
-      </div>
-      {newBest && <p className="subtitle">🏅 New high score!</p>}
-      <button className="btn big" onClick={() => startLevel(levelNum + 1)}>
-        Next day ▶
-      </button>
-      <button className="btn" onClick={() => startLevel(levelNum)}>
-        Replay day {levelNum}
-      </button>
-      <button className="btn" onClick={toMenu}>
-        Hive menu
-      </button>
+      {completed ? (
+        <button className="btn big" onClick={() => startLevel(levelNum + 1)}>
+          Next level
+        </button>
+      ) : (
+        <button className="btn big" onClick={() => startLevel(levelNum)}>
+          Play again
+        </button>
+      )}
     </div>
   );
 }
