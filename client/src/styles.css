@@ -37,8 +37,7 @@ body,
   pointer-events: none;
   z-index: 10;
   color: #fff;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
-}
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);}
 
 .hud-top {
   display: flex;
@@ -86,6 +85,63 @@ body,
   100% { transform: scale(1) rotate(0); }
 }
 
+/* Flowing score: small "+N" chips fly from each flower into one live total. */
+.score-flow {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 12;
+  color: #fff;
+}
+
+.score-anchor {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  left: 16px;
+}
+
+.score-total {
+  font-size: 60px;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+
+.score-total.bump {
+  animation: score-total-bump 0.18s cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+
+@keyframes score-total-bump {
+  0% { transform: scale(1.16); }
+  100% { transform: scale(1); }
+}
+
+.score-combo {
+  margin-top: 3px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #ffe37a;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.score-chip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-size: 34px;
+  font-weight: 800;
+  color: #fff;
+  white-space: nowrap;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  will-change: transform, opacity;
+  pointer-events: none;
+}
+
+.score-chip.gold {
+  font-size: 44px;
+  color: #ffe37a;
+}
+
 .energy-bar {
   height: 10px;
   border-radius: 5px;
@@ -123,7 +179,9 @@ body,
 
 .pause-btn {
   pointer-events: auto;
-  margin-left: 10px;
+  position: absolute;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  right: 16px;
   width: 34px;
   height: 34px;
   flex: none;
@@ -223,28 +281,44 @@ body,
   min-width: 90px;
 }
 
-/* Debug user switcher, pinned to the top of the menu screen. */
-.user-switch {
+/* Player's generated username, pinned to the top-right of the menu screen.
+   Clickable (debug): deletes this user's data and starts over. */
+/* Player identity cluster, pinned to the top-right: username pill with the
+   current day centered beneath it. */
+.player-badge {
   position: absolute;
   top: 14px;
   right: 14px;
+  z-index: 30;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  opacity: 0.85;
+  gap: 4px;
+  pointer-events: none;
 }
 
-.user-switch select {
-  pointer-events: auto;
-  border-radius: 8px;
+.user-badge {
+  padding: 5px 10px;
   border: none;
-  padding: 5px 8px;
+  border-radius: 999px;
   font-size: 13px;
   font-weight: 700;
-  background: #ffce3a;
+  background: rgba(255, 206, 58, 0.9);
   color: #4a3200;
+  opacity: 0.9;
+  pointer-events: auto;
   cursor: pointer;
+}
+
+.user-badge:hover {
+  opacity: 1;
+}
+
+/* Day counter, centered just under the username badge. */
+.day-badge {
+  font-size: 14px;
+  font-weight: 700;
+  opacity: 0.85;
 }
 
 .footnote {
@@ -356,3 +430,4 @@ body,
   font-size: 15px;
   line-height: 1.35;
 }
+

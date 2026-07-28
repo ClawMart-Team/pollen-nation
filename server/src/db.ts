@@ -16,6 +16,8 @@ export interface Stmts {
   maxLevelDone: { get(userId: string): { n: number | null } };
   getCachedLevel: { get(userId: string, levelNum: number): { json: string } | undefined };
   putCachedLevel: { run(userId: string, levelNum: number, json: string, source: string, ts: number): void };
+  /** DEBUG: remove every record belonging to a user (all tables). */
+  deleteUser: { run(userId: string): void };
 }
 
 // In-memory backend used on serverless (Vercel). The filesystem there is
@@ -82,6 +84,14 @@ function memoryStmts(): Stmts {
         cache.set(`${userId}${SEP}${levelNum}`, json);
       },
     },
+    deleteUser: {
+      run(userId) {
+        const pre = `${userId}${SEP}`;
+        for (const k of [...pollinations]) if (k.startsWith(pre)) pollinations.delete(k);
+        for (let i = results.length - 1; i >= 0; i--) if (results[i].userId === userId) results.splice(i, 1);
+        for (const k of [...cache.keys()]) if (k.startsWith(pre)) cache.delete(k);
+      },
+    },
   };
 }
 
@@ -140,6 +150,18 @@ CREATE TABLE IF NOT EXISTS user_level_cache (
     putCachedLevel: db.prepare(
       `INSERT OR REPLACE INTO user_level_cache (user_id, level_num, json, source, ts) VALUES (?, ?, ?, ?, ?)`
     ),
+    deleteUser: {
+      run: (() => {
+        const p = db.prepare(`DELETE FROM pollinations WHERE user_id = ?`);
+        const r = db.prepare(`DELETE FROM level_results WHERE user_id = ?`);
+        const c = db.prepare(`DELETE FROM user_level_cache WHERE user_id = ?`);
+        return (userId: string) => {
+          p.run(userId);
+          r.run(userId);
+          c.run(userId);
+        };
+      })(),
+    },
   } as unknown as Stmts;
 }
 

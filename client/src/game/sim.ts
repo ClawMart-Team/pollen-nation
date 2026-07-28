@@ -40,9 +40,9 @@ export interface Cluster {
 export type SimEvent =
   | { type: "hop"; dir: number }
   | { type: "jump" }
-  | { type: "collect"; flowerIdx: number; matched: boolean; combo: number }
-  | { type: "miss" }
-  | { type: "ended"; reason: "time" };
+  | { type: "turn" }
+  | { type: "collect"; flowerIdx: number; matched: boolean; combo: number; points: number }
+  | { type: "ended"; reason: "time" | "grass" | "home" };
 
 export type BeeMode = "running" | "done";
 
@@ -73,10 +73,16 @@ export interface Sim {
   /** Current chain length of same-type collects. */
   combo: number;
   bestCombo: number;
-  /** Why the run ended, once it has. */
-  endReason: "time" | null;
-  /** Active forward jump (leap over a row), or null while grounded-hopping. */
-  jump: { startZ: number; endZ: number; startY: number; skipRow: number } | null;
+  /** Why the run ended, once it has. "home" = made it back (a win). */
+  endReason: "time" | "grass" | "home" | null;
+  /** Travel direction along Z: +1 outbound from the hive, -1 returning home. */
+  travelDir: 1 | -1;
+  /** Next row to reach on the return leg (decreasing), or -1 while outbound. */
+  retRow: number;
+  /** Active mid-day turn-around (spin 180° in place), or null. */
+  turn: { t: number; y0: number } | null;
+  /** Active jump (leap over a row), or null while grounded-hopping. */
+  jump: { dir: 1 | -1; startZ: number; endZ: number; startY: number; skipRow: number } | null;
 
   flowers: RuntimeFlower[];
   rows: Row[];
@@ -146,6 +152,9 @@ export function createSim(map: MapData): Sim {
     combo: 0,
     bestCombo: 0,
     endReason: null,
+    travelDir: 1,
+    retRow: -1,
+    turn: null,
     jump: null,
     flowers,
     rows,
@@ -158,6 +167,29 @@ export function createSim(map: MapData): Sim {
 // ---------------------------------------------------------------------------
 // Step
 // ---------------------------------------------------------------------------
+
+/** Reset the bee to its opening-cruise state without regenerating the map.
+ *  Used by the menu's attract loop to replay the fly-by endlessly. */
+export function resetToStart(sim: Sim): void {
+  const hiveY = sim.heightAt(sim.map.hive.x, sim.map.hive.z);
+  sim.pos.set(0, hiveY + SW.hoverHeight, sim.map.hive.z);
+  sim.vel.set(0, 0, SW.speed);
+  sim.heading = 0;
+  sim.roll = 0;
+  sim.mode = "running";
+  sim.timeLeft = sim.dayLength;
+  sim.targetLane = 1;
+  sim.laneX = 0;
+  sim.nextRow = 0;
+  sim.lastSpecies = null;
+  sim.combo = 0;
+  sim.travelDir = 1;
+  sim.retRow = -1;
+  sim.turn = null;
+  sim.jump = null;
+  sim.endReason = null;
+  sim.events.length = 0;
+}
 
 /** Nearest lane index to the bee's current lateral position, clamped. */
 function nearestLane(laneX: number): number {
@@ -184,17 +216,56 @@ export function stepSim(sim: Sim, dt: number, inp: InputState): void {
   sim.t += dt;
   if (sim.mode === "done") return;
 
-  // --- Timer: the run ends at dusk. ---
-  sim.timeLeft -= dt;
-  if (sim.timeLeft <= 0) {
-    sim.timeLeft = 0;
-    endRun(sim);
+  // --- Timer: dusk. If the bee is still out when it hits zero, it dies. The
+  // day clock pauses during the scripted turn-around loop so the flourish never
+  // eats into the bee's time to fly home. ---
+  if (!sim.turn) {
+    sim.timeLeft -= dt;
+    if (sim.timeLeft <= 0) {
+      sim.timeLeft = 0;
+      endRun(sim, "time");
+      return;
+    }
+  }
+
+  // --- Mid-day turn-around: at the half-way mark the bee spins 180° and heads
+  // back toward the hive. ---
+  if (sim.travelDir === 1 && !sim.turn && sim.timeLeft <= sim.dayLength / 2) {
+    sim.turn = { t: 0, y0: sim.pos.y };
+    sim.retRow = sim.nextRow - 1; // the most recent row, re-crossed first
+    sim.jump = null;
+    sim.events.push({ type: "turn" });
+  }
+
+  if (sim.turn) {
+    // One large arc turn-around, forward progress frozen throughout:
+    //  • First half (turnDuration s): fly up and over the arc while spinning
+    //    180° to face back toward the hive.
+    //  • Second half (turnDuration s): hold that heading and glide back down,
+    //    giving the player a full turnDuration seconds looking at the oncoming
+    //    rows before the bee sets off and needs steering.
+    sim.turn.t += dt;
+    const total = SW.turnDuration * 2;
+    const p = THREE.MathUtils.clamp(sim.turn.t / total, 0, 1);
+    // Heading sweeps 180° across the first half, then holds facing home.
+    const turnP = THREE.MathUtils.clamp(sim.turn.t / SW.turnDuration, 0, 1);
+    sim.heading = Math.PI * THREE.MathUtils.smoothstep(turnP, 0, 1);
+    // One large arc up and back down over the whole maneuver (no flip).
+    sim.pos.y = sim.turn.y0 + Math.sin(p * Math.PI) * SW.turnHopHeight;
+    sim.vel.set(0, 0, 0);
+    if (sim.turn.t >= total) {
+      sim.turn = null;
+      sim.heading = Math.PI;
+      sim.travelDir = -1;
+    }
     return;
   }
 
-  // --- Hop input: one tap = one lane, clamped at the edges. ---
+  // --- Hop input: one tap = one lane, clamped at the edges. On the return leg
+  // the camera faces the other way, so flip the input to keep left/right
+  // relative to the bee's current travel direction. ---
   if (inp.hop !== 0) {
-    const dir = Math.sign(inp.hop);
+    const dir = Math.sign(inp.hop) * sim.travelDir;
     const next = THREE.MathUtils.clamp(sim.targetLane + dir, 0, SW.lanes - 1);
     if (next !== sim.targetLane) {
       sim.targetLane = next;
@@ -203,17 +274,23 @@ export function stepSim(sim: Sim, dt: number, inp: InputState): void {
     inp.hop = 0;
   }
 
-  // --- Jump input: leap forward, up and over the next row. ---
+  // --- Jump input: leap up and over the next row in the travel direction. ---
   if (inp.jump) {
     inp.jump = false;
-    if (!sim.jump && sim.nextRow + 1 < sim.rows.length) {
-      sim.jump = {
-        startZ: sim.pos.z,
-        endZ: sim.rows[sim.nextRow + 1].z,
-        startY: sim.pos.y,
-        skipRow: sim.nextRow,
-      };
-      sim.events.push({ type: "jump" });
+    if (!sim.jump) {
+      if (sim.travelDir === 1) {
+        const land = sim.nextRow + 1;
+        if (land < sim.rows.length) {
+          sim.jump = { dir: 1, startZ: sim.pos.z, endZ: sim.rows[land].z, startY: sim.pos.y, skipRow: sim.nextRow };
+          sim.events.push({ type: "jump" });
+        }
+      } else {
+        const land = sim.retRow - 1;
+        if (land >= 0) {
+          sim.jump = { dir: -1, startZ: sim.pos.z, endZ: sim.rows[land].z, startY: sim.pos.y, skipRow: sim.retRow };
+          sim.events.push({ type: "jump" });
+        }
+      }
     }
   }
 
@@ -227,25 +304,28 @@ export function stepSim(sim: Sim, dt: number, inp: InputState): void {
   const rollTarget = THREE.MathUtils.clamp((targetX - sim.laneX) * 1.4, -SW.leanMax, SW.leanMax);
   sim.roll += (rollTarget - sim.roll) * Math.min(1, 9 * dt);
 
-  // --- Constant forward motion. ---
+  // --- Constant motion along the travel direction (faster on the way home). ---
   const prevY = sim.pos.y;
-  sim.pos.z += SW.speed * dt;
+  const prevZ = sim.pos.z;
+  const moveSpeed = SW.speed * (sim.travelDir === -1 ? SW.returnSpeedMult : 1);
+  sim.pos.z += moveSpeed * sim.travelDir * dt;
   const lane = nearestLane(sim.laneX);
   const firstRowZ = sim.rows.length ? sim.rows[0].z : SW.startZ;
 
-  if (sim.jump && sim.pos.z >= sim.jump.endZ) sim.jump = null;
+  const jumpDone = sim.jump && (sim.jump.dir === 1 ? sim.pos.z >= sim.jump.endZ : sim.pos.z <= sim.jump.endZ);
+  if (jumpDone) sim.jump = null;
 
   if (sim.jump) {
     // A single tall arc that carries the bee over the skipped row and lands on
-    // the one beyond it.
+    // the one beyond it (in the travel direction).
     const j = sim.jump;
-    const span = Math.max(1e-4, j.endZ - j.startZ);
-    const frac = THREE.MathUtils.clamp((sim.pos.z - j.startZ) / span, 0, 1);
-    const endY = landingY(sim, j.skipRow + 1, lane);
+    const span = j.endZ - j.startZ;
+    const frac = THREE.MathUtils.clamp((sim.pos.z - j.startZ) / (span || 1e-4), 0, 1);
+    const endY = landingY(sim, j.skipRow + j.dir, lane);
     sim.pos.y = j.startY + (endY - j.startY) * frac + Math.sin(frac * Math.PI) * SW.jumpArcHeight;
   } else if (sim.pos.z < firstRowZ) {
-    // Opening: cruise at a constant height out from the hive, then hop up onto
-    // the first flower over the final row-gap.
+    // Between the hive and the first row: cruise at a constant height. Outbound
+    // this is the launch; on the return it is the final glide home.
     const cruiseY = sim.heightAt(sim.map.hive.x, sim.map.hive.z) + SW.hoverHeight;
     const hopStartZ = firstRowZ - SW.rowGap;
     if (sim.pos.z <= hopStartZ) {
@@ -273,68 +353,108 @@ export function stepSim(sim: Sim, dt: number, inp: InputState): void {
   sim.vel.set(
     (sim.pos.x - prevX) / Math.max(dt, 1e-4),
     (sim.pos.y - prevY) / Math.max(dt, 1e-4),
-    SW.speed
+    (sim.pos.z - prevZ) / Math.max(dt, 1e-4)
   );
 
-  // --- Collection: as each row's z-plane passes under the bee, collect the
-  // flower in the bee's current lane and score the chain. ---
-  while (sim.nextRow < sim.rows.length && sim.pos.z >= sim.rows[sim.nextRow].z) {
-    const row = sim.rows[sim.nextRow];
-    sim.nextRow++;
-    const lane = nearestLane(sim.laneX);
+  // --- Collection / hazard check. ---
+  if (sim.travelDir === 1) {
+    // Outbound: collect each row as its z-plane passes under the bee.
+    while (sim.nextRow < sim.rows.length && sim.pos.z >= sim.rows[sim.nextRow].z) {
+      const ri = sim.nextRow;
+      const row = sim.rows[ri];
+      sim.nextRow++;
+      const lane = nearestLane(sim.laneX);
 
-    // Jumped clean over this row: no collect, no gap penalty.
-    if (sim.jump && sim.nextRow - 1 === sim.jump.skipRow) {
-      continue;
-    }
+      // Jumped clean over this row: no collect, no gap penalty.
+      if (sim.jump && ri === sim.jump.skipRow) continue;
 
-    const fIdx = row.lanes[lane];
+      const fIdx = row.lanes[lane];
 
-    // Empty lane: the bee lands in a gap — the score resets, the chain breaks,
-    // and a chunk of the day is lost.
-    if (fIdx < 0) {
-      sim.score = 0;
-      sim.combo = 0;
-      sim.lastSpecies = null;
-      sim.timeLeft -= SW.missTimePenalty;
-      sim.events.push({ type: "miss" });
-      if (sim.timeLeft <= 0) {
-        sim.timeLeft = 0;
-        endRun(sim);
+      // Empty lane: the bee drops into the gap and touches the grass — over.
+      if (fIdx < 0) {
+        endRun(sim, "grass");
         return;
       }
-      continue;
+
+      const f = sim.flowers[fIdx];
+      const sp = f.def.species;
+
+      const matched = sim.lastSpecies !== null && sp === sim.lastSpecies;
+      let gained: number;
+      if (matched) {
+        sim.combo++;
+        gained = SW.matchPoints * sim.combo;
+      } else {
+        sim.combo = 1;
+        gained = SW.basePoints;
+      }
+      sim.score += gained;
+      sim.bestCombo = Math.max(sim.bestCombo, sim.combo);
+      sim.lastSpecies = sp;
+
+      // Mark collected for the wilt/darken render feedback.
+      f.pollinated = true;
+      f.nectarLeft = 0;
+      f.dirty = true;
+
+      sim.events.push({ type: "collect", flowerIdx: fIdx, matched, combo: sim.combo, points: gained });
+    }
+  } else {
+    // Return leg: re-cross the rows heading home. Flowers the bee already
+    // landed on outbound are spent (no score), but any it skipped can still be
+    // pollinated for points. A gap is still a fatal fall into the grass.
+    while (sim.retRow >= 0 && sim.pos.z <= sim.rows[sim.retRow].z) {
+      const ri = sim.retRow;
+      const row = sim.rows[ri];
+      sim.retRow--;
+      const lane = nearestLane(sim.laneX);
+
+      if (sim.jump && ri === sim.jump.skipRow) continue;
+
+      const fIdx = row.lanes[lane];
+
+      if (fIdx < 0) {
+        endRun(sim, "grass");
+        return;
+      }
+
+      const f = sim.flowers[fIdx];
+
+      // Already landed on this one outbound — a valid perch, but no score.
+      if (f.pollinated) continue;
+
+      const sp = f.def.species;
+      const matched = sim.lastSpecies !== null && sp === sim.lastSpecies;
+      let gained: number;
+      if (matched) {
+        sim.combo++;
+        gained = SW.matchPoints * sim.combo;
+      } else {
+        sim.combo = 1;
+        gained = SW.basePoints;
+      }
+      sim.score += gained;
+      sim.bestCombo = Math.max(sim.bestCombo, sim.combo);
+      sim.lastSpecies = sp;
+
+      f.pollinated = true;
+      f.nectarLeft = 0;
+      f.dirty = true;
+
+      sim.events.push({ type: "collect", flowerIdx: fIdx, matched, combo: sim.combo, points: gained });
     }
 
-    const f = sim.flowers[fIdx];
-    const sp = f.def.species;
-
-    const matched = sim.lastSpecies !== null && sp === sim.lastSpecies;
-    if (matched) {
-      sim.combo++;
-      sim.score += SW.matchPoints * sim.combo;
-    } else {
-      sim.combo = 1;
-      sim.score += SW.basePoints;
+    // Made it back to the hive before dusk — a win.
+    if (sim.pos.z <= sim.map.hive.z) {
+      endRun(sim, "home");
+      return;
     }
-    sim.bestCombo = Math.max(sim.bestCombo, sim.combo);
-    sim.lastSpecies = sp;
-
-    // Mark collected for the wilt/darken render feedback.
-    f.pollinated = true;
-    f.nectarLeft = 0;
-    f.dirty = true;
-
-    sim.events.push({ type: "collect", flowerIdx: fIdx, matched, combo: sim.combo });
   }
-
-  // Ran out of rows before the timer — end the run.
-  if (sim.nextRow >= sim.rows.length) endRun(sim);
 }
 
-function endRun(sim: Sim): void {
+function endRun(sim: Sim, reason: "time" | "grass" | "home"): void {
   if (sim.mode === "done") return;
   sim.mode = "done";
-  sim.endReason = "time";
-  sim.events.push({ type: "ended", reason: "time" });
+  sim.endReason = reason;
+  sim.events.push({ type: "ended", reason });
 }

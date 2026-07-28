@@ -47,7 +47,19 @@ export const SW = {
   /** Peak roll lean while hopping (radians). */
   leanMax: 0.5,
   /** Length of a run (s). */
-  runSeconds: 150,
+  runSeconds: 40,
+  /** How much faster the bee travels on the return leg home (the rush back to
+   *  the hive before dusk). >1 gives a clean run a little margin. */
+  returnSpeedMult: 1.12,
+  /** Seconds each half of the mid-day turn-around takes. The bee flies a full
+   *  loop "out" while spinning 180° to face home, then a second loop "back"
+   *  while holding that heading — giving the player a full 2s to read the
+   *  oncoming rows before setting off. Total maneuver = 2 × this. The day clock
+   *  is paused throughout so the flourish never costs time to fly home. */
+  turnDuration: 2,
+  /** Peak height of the turn-around arc (m) — the bee flies one large sweeping
+   *  arc as it comes about, rather than spinning on the spot. */
+  turnHopHeight: 4,
   /** Points for collecting a flower that breaks/starts a chain. */
   basePoints: 10,
   /** Per-combo points awarded on a matching collect (× current combo). */
