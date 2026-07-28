@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
+import { useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import { clone as skeletonClone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { CONFIG } from "@pollen/shared";
@@ -15,6 +16,32 @@ import { Particles } from "./Particles";
 
 /** Target height (world units) of the hive model. */
 const HIVE_SIZE = 3.2;
+
+/**
+ * Responsive camera FOV. The chase cam is locked to the centre lane, so all
+ * three lanes must fit horizontally. CONFIG.camera.fov is a *vertical* FOV,
+ * which on a narrow (portrait) phone shrinks the horizontal field until the
+ * outer lanes — and the bee on them — get clipped. This widens the vertical FOV
+ * as needed so the horizontal field never drops below what a 16:9 screen shows;
+ * on landscape/desktop it leaves the configured FOV untouched.
+ */
+function ResponsiveCamera() {
+  const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
+  const width = useThree((s) => s.size.width);
+  const height = useThree((s) => s.size.height);
+  useEffect(() => {
+    const REF_ASPECT = 16 / 9;
+    const baseV = THREE.MathUtils.degToRad(CONFIG.camera.fov);
+    // Horizontal FOV a 16:9 screen gets at the configured vertical FOV.
+    const minH = 2 * Math.atan(Math.tan(baseV / 2) * REF_ASPECT);
+    const aspect = width / Math.max(1, height);
+    // Vertical FOV needed to keep that horizontal field at this aspect.
+    const neededV = 2 * Math.atan(Math.tan(minH / 2) / aspect);
+    camera.fov = THREE.MathUtils.radToDeg(Math.max(baseV, neededV));
+    camera.updateProjectionMatrix();
+  }, [camera, width, height]);
+  return null;
+}
 
 /** The hive: home marker, rendered from bee_hive.glb. The sim knows its
  *  position via sim.map.hive (returning here before dusk is a win). */
@@ -92,6 +119,7 @@ export function World({ sim }: { sim: Sim }) {
       <Grass sim={sim} />
       <Bee sim={sim} />
       <Particles />
+      <ResponsiveCamera />
       <GameLoop sim={sim} />
     </>
   );

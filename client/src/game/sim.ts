@@ -79,8 +79,10 @@ export interface Sim {
   travelDir: 1 | -1;
   /** Next row to reach on the return leg (decreasing), or -1 while outbound. */
   retRow: number;
-  /** Active mid-day turn-around (spin 180° in place), or null. */
-  turn: { t: number; y0: number } | null;
+  /** Active mid-day turn-around (the cinematic arc), or null. `x0`/`xLane` glide
+   *  the bee laterally into a lane that has flowers on the first return rows so
+   *  it never drops into a gap the instant the turn completes. */
+  turn: { t: number; y0: number; x0: number; xLane: number } | null;
   /** Active jump (leap over a row), or null while grounded-hopping. */
   jump: { dir: 1 | -1; startZ: number; endZ: number; startY: number; skipRow: number } | null;
 
@@ -196,6 +198,29 @@ function nearestLane(laneX: number): number {
   return THREE.MathUtils.clamp(Math.round(laneX / SW.laneGap) + 1, 0, SW.lanes - 1);
 }
 
+/** True if the given row has a flower (not a gap) in the given lane. */
+function laneFilled(sim: Sim, rowIdx: number, lane: number): boolean {
+  const r = THREE.MathUtils.clamp(rowIdx, 0, sim.rows.length - 1);
+  return sim.rows[r].lanes[lane] >= 0;
+}
+
+/** Choose the lane the bee should be in when it finishes the turn-around, so it
+ *  lands on a flower rather than falling into a gap right out of the maneuver.
+ *  Prefers the bee's current lane; otherwise the nearest lane that has a flower
+ *  on both of the first two return rows. Each row has at most one empty lane, so
+ *  a safe common lane always exists. */
+function pickReturnLane(sim: Sim, retRow: number, current: number): number {
+  const rows = [retRow, retRow - 1];
+  const safe = (lane: number) => rows.every((r) => r < 0 || laneFilled(sim, r, lane));
+  if (safe(current)) return current;
+  for (let d = 1; d < SW.lanes; d++) {
+    for (const lane of [current - d, current + d]) {
+      if (lane >= 0 && lane < SW.lanes && safe(lane)) return lane;
+    }
+  }
+  return current;
+}
+
 /** Landing height for a given row/lane. For a flower: its species-specific top
  *  (head center + head radius) plus a small clearance. For an empty lane: just
  *  above the ground, so the bee visibly dips into the gap. Clamps to valid rows. */
@@ -231,8 +256,12 @@ export function stepSim(sim: Sim, dt: number, inp: InputState): void {
   // --- Mid-day turn-around: at the half-way mark the bee spins 180° and heads
   // back toward the hive. ---
   if (sim.travelDir === 1 && !sim.turn && sim.timeLeft <= sim.dayLength / 2) {
-    sim.turn = { t: 0, y0: sim.pos.y };
     sim.retRow = sim.nextRow - 1; // the most recent row, re-crossed first
+    // Aim the bee at a lane that has flowers on the first return rows so it does
+    // not fall into a gap the moment the cinematic arc completes.
+    const safeLane = pickReturnLane(sim, sim.retRow, nearestLane(sim.laneX));
+    sim.targetLane = safeLane;
+    sim.turn = { t: 0, y0: sim.pos.y, x0: sim.laneX, xLane: laneToX(safeLane) };
     sim.jump = null;
     sim.events.push({ type: "turn" });
   }
@@ -252,6 +281,10 @@ export function stepSim(sim: Sim, dt: number, inp: InputState): void {
     sim.heading = Math.PI * THREE.MathUtils.smoothstep(turnP, 0, 1);
     // One large arc up and back down over the whole maneuver (no flip).
     sim.pos.y = sim.turn.y0 + Math.sin(p * Math.PI) * SW.turnHopHeight;
+    // Glide sideways into the chosen safe lane over the course of the arc, so the
+    // bee comes out of the turn lined up with a flower rather than a gap.
+    sim.laneX = sim.turn.x0 + (sim.turn.xLane - sim.turn.x0) * THREE.MathUtils.smoothstep(p, 0, 1);
+    sim.pos.x = sim.laneX;
     sim.vel.set(0, 0, 0);
     if (sim.turn.t >= total) {
       sim.turn = null;
