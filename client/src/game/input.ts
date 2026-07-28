@@ -20,15 +20,22 @@ export function resetInput(): void {
 export function bindInput(el: HTMLElement): () => void {
   const onDown = (e: PointerEvent) => {
     e.preventDefault();
-    // Tapping the top of the screen jumps forward over a row.
-    if (e.clientY < window.innerHeight * 0.22) {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    // Jump zones: the top of the screen, or the middle of the bottom (thumb-
+    // friendly on mobile) — both leap forward over a row.
+    if (e.clientY < h * 0.22) {
+      input.jump = true;
+      return;
+    }
+    if (e.clientY > h * 0.7 && e.clientX > w / 3 && e.clientX < (2 * w) / 3) {
       input.jump = true;
       return;
     }
     // Camera looks along +Z, so world +X is on the screen's left. Tapping the
     // left half should hop toward screen-left (increasing lane/X), and vice
     // versa, so the bee moves toward the tapped side.
-    input.hop = e.clientX < window.innerWidth / 2 ? 1 : -1;
+    input.hop = e.clientX < w / 2 ? 1 : -1;
   };
   // Desktop: arrow keys hop toward the pressed direction (left = screen-left);
   // up arrow jumps forward over a row.
