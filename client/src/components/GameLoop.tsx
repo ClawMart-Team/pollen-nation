@@ -7,13 +7,17 @@ import { input } from "../game/input";
 import { fxBus } from "../game/fx";
 import { juiceBus, buzz } from "../game/juice";
 import * as audio from "../game/audio";
-import { postPollinate } from "../lib/api";
 import { useGame } from "../state/store";
 
 const camTarget = new THREE.Vector3();
 const camPos = new THREE.Vector3();
 const fwd = new THREE.Vector3();
-const sipPos = new THREE.Vector3();
+
+/** Flower head color as a THREE-friendly hex number. */
+function speciesColor(species: string): number {
+  const hex = (CONFIG.species as Record<string, { color: string }>)[species]?.color ?? "#ffffff";
+  return parseInt(hex.replace("#", ""), 16);
+}
 
 /**
  * Drives the whole game from a single useFrame: physics step, event handling,
@@ -23,8 +27,6 @@ export function GameLoop({ sim }: { sim: Sim }) {
   const { camera } = useThree();
   const hudAccum = useRef(0);
   const started = useRef(false);
-  const sipFx = useRef(0);
-  const sipSnd = useRef(0);
 
   useFrame((_, dtRaw) => {
     const dt = Math.min(dtRaw, 0.05);
@@ -37,75 +39,69 @@ export function GameLoop({ sim }: { sim: Sim }) {
     // start view framed but don't advance the sim so the bee holds still.
     const frozen = paused || !ready;
 
-    let ended: "time" | "energy" | "goal" | null = null;
+    let ended = false;
     if (!frozen) {
       stepSim(sim, dt, input);
-      audio.updateBuzz(dt, sim.mode === "flying");
+      audio.updateBuzz(dt, sim.mode === "running");
 
       // --- Events ---
       for (const ev of sim.events) {
         switch (ev.type) {
-          case "flap":
+          case "hop":
             audio.onFlap();
+            buzz(10);
             break;
-          case "pollinated": {
+          case "jump":
+            // Leaping over a row: a brighter flap and a punchier buzz.
+            audio.onFlap();
+            juiceBus.flash("#bfe6ff", 0.22);
+            buzz(24);
+            break;
+          case "collect": {
             const f = sim.flowers[ev.flowerIdx];
-            audio.onPollinate();
-            // Juice: a fat golden burst, a soft white sparkle core, a screen
-            // flash and a haptic thump so every flower lands with a punch.
-            fxBus.spawn(f.pos, 0xffe066, 44);
-            fxBus.spawn(f.pos, 0xfff6c0, 20);
-            juiceBus.flash("#ffe37a", 0.42);
-            buzz(28);
-            postPollinate(sim.map.levelId, f.def.id);
-            useGame.getState().bumpPollinationTotal();
+            const col = speciesColor(f.def.species);
+            if (ev.matched) {
+              // Chaining the same type: a fat burst in the flower's own color,
+              // a white sparkle core, a flash that grows with the combo, a
+              // rising chime and a satisfying haptic pop.
+              const strength = Math.min(0.85, 0.35 + ev.combo * 0.12);
+              fxBus.spawn(f.pos, col, 34 + Math.min(ev.combo, 6) * 6);
+              fxBus.spawn(f.pos, 0xffffff, 14);
+              juiceBus.flash("#fff0a0", strength);
+              audio.onSip(Math.min(1, (ev.combo - 1) / 8));
+              buzz(20 + Math.min(ev.combo, 6) * 6);
+            } else {
+              // Chain broken / started: a small colored puff and a soft thud.
+              fxBus.spawn(f.pos, col, 16);
+              audio.onLand();
+              buzz(12);
+            }
             break;
           }
-          case "landed":
+          case "miss": {
+            // Landed in an empty gap: the score resets. Harsh red flash, a dull
+            // grey puff and a strong double-buzz sell the whiff.
+            fxBus.spawn(sim.pos, 0x555555, 20);
+            juiceBus.flash("#ff3b3b", 0.6);
             audio.onLand();
+            buzz([0, 60, 40, 60]);
             break;
-          case "terrainSkim":
-            fxBus.spawn(sim.pos, 0xc9b98a, 8);
-            break;
+          }
           case "ended":
-            ended = ev.reason;
-            if (ev.reason === "goal") {
-              // Quota met: celebratory fanfare, big burst, bright flash, buzz.
-              audio.onGoal();
-              fxBus.spawn(sim.pos, 0xffe066, 64);
-              juiceBus.flash("#fff0a0", 0.75);
-              buzz([0, 40, 40, 60]);
-            }
+            ended = true;
+            audio.onGoal();
+            fxBus.spawn(sim.pos, 0xffe066, 64);
+            juiceBus.flash("#fff0a0", 0.7);
+            buzz([0, 40, 40, 60]);
             break;
         }
       }
       sim.events.length = 0;
-
-      // --- Sip fountain: while drinking, spray a steady stream of pollen and
-      // play a rising sparkle so collecting nectar feels alive. ---
-      if (sim.mode === "perched" && sim.sipRate > 0) {
-        sipFx.current += dt;
-        sipSnd.current += dt;
-        if (sipFx.current >= 0.045) {
-          sipFx.current = 0;
-          sipPos.copy(sim.pos);
-          sipPos.y += 0.35;
-          fxBus.spawn(sipPos, 0xffd24a, 3);
-        }
-        if (sipSnd.current >= 0.12) {
-          sipSnd.current = 0;
-          const progress = sim.nectarGoal > 0 ? sim.nectar / sim.nectarGoal : 0;
-          audio.onSip(Math.min(1, progress));
-        }
-      } else {
-        sipFx.current = 0;
-        sipSnd.current = 0;
-      }
     } else {
       audio.updateBuzz(dt, false); // let the wing buzz die out while frozen
     }
 
-    // --- Chase camera: fixed offset & pitch; altitude = scouting information. ---
+    // --- Chase camera: fixed offset & pitch behind the bee (heading is 0). ---
     fwd.set(Math.sin(sim.heading), 0, Math.cos(sim.heading));
     camPos.copy(sim.pos).addScaledVector(fwd, -CONFIG.camera.back);
     camPos.y += CONFIG.camera.up;
@@ -127,18 +123,19 @@ export function GameLoop({ sim }: { sim: Sim }) {
     if (hudAccum.current >= 1 / CONFIG.hud.updateHz) {
       hudAccum.current = 0;
       useGame.getState().setHud({
-        energy: sim.energy,
-        energyMax: sim.energyMax,
+        score: sim.score,
+        combo: sim.combo,
+        bestCombo: sim.bestCombo,
         timeLeft: sim.timeLeft,
         dayFrac: 1 - sim.timeLeft / sim.dayLength,
-        nectar: sim.nectar,
-        pollinatedSession: sim.pollinatedThisRun,
       });
     }
 
-    if (sim.mode === "done" && ended === null) {
-      // 'ended' event already fired on a previous frame; finish now.
-      useGame.getState().endLevel(sim.endReason ?? (sim.timeLeft <= 0 ? "time" : "energy"));
+    if (sim.mode === "done") {
+      // The run has finished (timer elapsed or all rows collected) — show it.
+      if (ended || useGame.getState().phase === "playing") {
+        useGame.getState().endLevel();
+      }
     }
   });
 

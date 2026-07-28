@@ -23,6 +23,8 @@ export default function App() {
     if (phase !== "playing" || !inputRef.current) return;
     const unbind = bindInput(inputRef.current);
     const el = inputRef.current;
+    // Focus the layer so arrow keys work immediately, without a first click.
+    el.focus();
     const audioKick = () => ensureAudio();
     el.addEventListener("pointerdown", audioKick);
     return () => {
@@ -39,7 +41,7 @@ export default function App() {
       {phase === "playing" && sim && (
         <>
           {/* transparent input layer above the canvas, below the HUD */}
-          <div ref={inputRef} className="input-layer" />
+          <div ref={inputRef} className="input-layer" tabIndex={-1} />
           <JuiceFlash />
           <HUD />
           <TutorialOverlay />

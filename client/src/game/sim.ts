@@ -1,6 +1,7 @@
 import * as THREE from "three";
-import { CONFIG, nectarGoalForLevel, type MapData, type FlowerDef } from "@pollen/shared";
+import { CONFIG, type MapData, type FlowerDef, type SpeciesId } from "@pollen/shared";
 import { makeHeightSampler, type HeightSampler } from "../lib/noise";
+import { SW, laneToX } from "./smallworld";
 import type { InputState } from "./input";
 
 // ---------------------------------------------------------------------------
@@ -9,68 +10,80 @@ import type { InputState } from "./input";
 
 export interface RuntimeFlower {
   def: FlowerDef;
-  /** Head (perch) position, terrain-resolved. */
+  /** Head position, terrain-resolved. */
   pos: THREE.Vector3;
   nectarMax: number;
   nectarLeft: number;
+  /** True once collected (drives the wilt/darken render feedback). */
   pollinated: boolean;
   /** Render dirty flag: instance matrix/color needs refresh. */
   dirty: boolean;
   clusterIdx: number;
 }
 
+/** A row of three flowers (one per lane), sorted left→right. */
+export interface Row {
+  z: number;
+  /** Flower indices by lane: [left, center, right]. */
+  lanes: number[];
+}
+
+/** Cluster locator data (unused by Small World; kept so the beacon/ring
+ *  components still compile). */
 export interface Cluster {
   center: THREE.Vector3;
   flowerIdxs: number[];
   nectarMax: number;
-  /** Cached, refreshed by the sim when flowers drain. */
   nectarLeft: number;
 }
 
 export type SimEvent =
-  | { type: "flap" }
-  | { type: "landed"; flowerIdx: number }
-  | { type: "tookOff" }
-  | { type: "pollinated"; flowerIdx: number }
-  | { type: "terrainSkim" }
-  | { type: "ended"; reason: "time" | "energy" | "goal" };
+  | { type: "hop"; dir: number }
+  | { type: "jump" }
+  | { type: "collect"; flowerIdx: number; matched: boolean; combo: number }
+  | { type: "miss" }
+  | { type: "ended"; reason: "time" };
 
-export type BeeMode = "flying" | "perched" | "dying" | "done";
+export type BeeMode = "running" | "done";
 
 export interface Sim {
   map: MapData;
   heightAt: HeightSampler;
   pos: THREE.Vector3;
   vel: THREE.Vector3;
-  /** Yaw. heading 0 = +Z (away from the hive, toward the horizon). */
+  /** Yaw. heading 0 = +Z (forward, toward the horizon). Fixed in Small World. */
   heading: number;
+  /** Roll used for the hop lean. */
   roll: number;
-  /** Smoothed steering value in [-1, 1]. */
-  steer: number;
   mode: BeeMode;
-  energy: number;
-  energyMax: number;
   timeLeft: number;
   dayLength: number;
-  nectar: number;
-  /** Minimum nectar required to complete this level. */
-  nectarGoal: number;
-  pollinatedThisRun: number;
-  perchedFlower: number;
-  sipRate: number;
-  skimCooldown: number;
-  takeoffGrace: number;
-  dieT: number;
-  /** Why the flight ended, once it has (drives the summary). */
-  endReason: "time" | "energy" | "goal" | null;
-  /** Seconds the current tap has been held (for dive engagement). */
-  holdT: number;
-  /** Wing-flap animation trigger timestamp (sim time). */
-  lastFlapAt: number;
   t: number;
+
+  // --- Lane runner state ---
+  /** Committed lane the bee is hopping toward (0=left, 1=center, 2=right). */
+  targetLane: number;
+  /** Smoothed lateral X of the bee (tweened toward the target lane). */
+  laneX: number;
+  /** Index of the next row the bee will reach/collect. */
+  nextRow: number;
+  /** Species of the most recently collected flower (for chaining). */
+  lastSpecies: SpeciesId | null;
+  score: number;
+  /** Current chain length of same-type collects. */
+  combo: number;
+  bestCombo: number;
+  /** Why the run ended, once it has. */
+  endReason: "time" | null;
+  /** Active forward jump (leap over a row), or null while grounded-hopping. */
+  jump: { startZ: number; endZ: number; startY: number; skipRow: number } | null;
+
   flowers: RuntimeFlower[];
+  rows: Row[];
+  /** Kept for compatibility with cluster-based visuals (unused here). */
   clusters: Cluster[];
   events: SimEvent[];
+  /** Soft world bounds (kept for camera/terrain helpers). */
   bounds: { halfX: number; maxZ: number };
 }
 
@@ -78,29 +91,10 @@ export interface Sim {
 // Setup
 // ---------------------------------------------------------------------------
 
-const F = CONFIG.flight;
-const FL = CONFIG.flowers;
-
-const GRID_CELL = 16;
-const gkey = (cx: number, cz: number) => cx + "," + cz;
-
-const flowerGrid = new Map<string, number[]>();
-
-function buildFlowerGrid(flowers: RuntimeFlower[]): void {
-  flowerGrid.clear();
-  flowers.forEach((f, i) => {
-    const k = gkey(Math.floor(f.pos.x / GRID_CELL), Math.floor(f.pos.z / GRID_CELL));
-    let arr = flowerGrid.get(k);
-    if (!arr) flowerGrid.set(k, (arr = []));
-    arr.push(i);
-  });
-}
-
-export function createSim(map: MapData, pollinatedIds: string[]): Sim {
+export function createSim(map: MapData): Sim {
   const heightAt = makeHeightSampler(map);
-  const pollinatedSet = new Set(pollinatedIds);
 
-  const flowers: RuntimeFlower[] = map.flowers.map((def) => {
+  const flowers: RuntimeFlower[] = map.flowers.map((def: FlowerDef) => {
     const sp = CONFIG.species[def.species] ?? CONFIG.species.daisy;
     const y = heightAt(def.x, def.z) + sp.stemHeight * def.size;
     return {
@@ -108,68 +102,54 @@ export function createSim(map: MapData, pollinatedIds: string[]): Sim {
       pos: new THREE.Vector3(def.x, y, def.z),
       nectarMax: def.nectar,
       nectarLeft: def.nectar,
-      pollinated: pollinatedSet.has(def.id),
+      pollinated: false,
       dirty: true,
       clusterIdx: -1,
     };
   });
 
-  // Group flowers into clusters on a coarse grid (beacons + cluster rings).
-  const cell = CONFIG.world.clusterCell;
-  const byCell = new Map<string, number[]>();
-  flowers.forEach((f, i) => {
-    const k = gkey(Math.floor(f.pos.x / cell), Math.floor(f.pos.z / cell));
-    let arr = byCell.get(k);
-    if (!arr) byCell.set(k, (arr = []));
-    arr.push(i);
-  });
-  const clusters: Cluster[] = [];
-  for (const idxs of byCell.values()) {
-    const center = new THREE.Vector3();
-    let max = 0;
-    for (const i of idxs) {
-      center.add(flowers[i].pos);
-      max += flowers[i].nectarMax;
-      flowers[i].clusterIdx = clusters.length;
+  // Reconstruct rows by row index (from z) and lane (from x). Empty lanes are
+  // marked -1 — a gap the bee must avoid.
+  const byRow = new Map<number, Row>();
+  for (let i = 0; i < flowers.length; i++) {
+    const f = flowers[i];
+    const rIdx = Math.round((f.pos.z - SW.startZ) / SW.rowGap);
+    const lane = THREE.MathUtils.clamp(Math.round(f.pos.x / SW.laneGap) + 1, 0, SW.lanes - 1);
+    let row = byRow.get(rIdx);
+    if (!row) {
+      row = { z: SW.startZ + rIdx * SW.rowGap, lanes: new Array(SW.lanes).fill(-1) };
+      byRow.set(rIdx, row);
     }
-    center.divideScalar(idxs.length);
-    clusters.push({ center, flowerIdxs: idxs, nectarMax: max, nectarLeft: max });
+    row.lanes[lane] = i;
   }
-
-  buildFlowerGrid(flowers);
+  const rows: Row[] = [...byRow.values()].sort((a, b) => a.z - b.z);
 
   const hiveY = heightAt(map.hive.x, map.hive.z);
-  const dayLength = map.difficulty.dayLengthSec || CONFIG.day.defaultLengthSec;
-  const energyMax = (map.difficulty.energyBudget || CONFIG.day.defaultEnergy) * 3;
-  const nectarGoal = map.difficulty.nectarGoal ?? nectarGoalForLevel(map.difficulty.level);
+  const dayLength = map.difficulty.dayLengthSec || SW.runSeconds;
 
   return {
     map,
     heightAt,
-    pos: new THREE.Vector3(map.hive.x, hiveY + 3, map.hive.z),
-    vel: new THREE.Vector3(0, 0, F.baseSpeed),
+    pos: new THREE.Vector3(0, hiveY + SW.hoverHeight, map.hive.z),
+    vel: new THREE.Vector3(0, 0, SW.speed),
     heading: 0,
     roll: 0,
-    steer: 0,
-    mode: "flying",
-    energy: energyMax,
-    energyMax,
+    mode: "running",
     timeLeft: dayLength,
     dayLength,
-    nectar: 0,
-    nectarGoal,
-    pollinatedThisRun: 0,
-    perchedFlower: -1,
-    sipRate: 0,
-    skimCooldown: 0,
-    takeoffGrace: 0,
-    dieT: 0,
-    endReason: null,
-    holdT: 0,
-    lastFlapAt: -10,
     t: 0,
+    targetLane: 1,
+    laneX: 0,
+    nextRow: 0,
+    lastSpecies: null,
+    score: 0,
+    combo: 0,
+    bestCombo: 0,
+    endReason: null,
+    jump: null,
     flowers,
-    clusters,
+    rows,
+    clusters: [],
     events: [],
     bounds: { halfX: map.terrain.sizeX / 2 - 4, maxZ: map.terrain.sizeZ - 4 },
   };
@@ -179,218 +159,182 @@ export function createSim(map: MapData, pollinatedIds: string[]): Sim {
 // Step
 // ---------------------------------------------------------------------------
 
-/** Steering response: dead zone in the middle, curved toward the edges. */
-function steerCurve(x: number): number {
-  const dz = F.steerDeadZone;
-  const a = Math.abs(x);
-  if (a <= dz) return 0;
-  const t = Math.min(1, (a - dz) / (1 - dz));
-  return Math.sign(x) * Math.pow(t, F.steerCurveExp);
+/** Nearest lane index to the bee's current lateral position, clamped. */
+function nearestLane(laneX: number): number {
+  return THREE.MathUtils.clamp(Math.round(laneX / SW.laneGap) + 1, 0, SW.lanes - 1);
 }
 
-function findLandableFlower(sim: Sim): number {
-  const cx = Math.floor(sim.pos.x / GRID_CELL);
-  const cz = Math.floor(sim.pos.z / GRID_CELL);
-  let best = -1;
-  let bestD2 = FL.landingRadius * FL.landingRadius;
-  for (let dx = -1; dx <= 1; dx++)
-    for (let dz = -1; dz <= 1; dz++) {
-      const arr = flowerGrid.get(gkey(cx + dx, cz + dz));
-      if (!arr) continue;
-      for (const i of arr) {
-        const f = sim.flowers[i];
-        if (f.nectarLeft / f.nectarMax <= FL.depletedFrac && f.pollinated) continue;
-        const d2 = sim.pos.distanceToSquared(f.pos);
-        if (d2 < bestD2) {
-          bestD2 = d2;
-          best = i;
-        }
-      }
-    }
-  return best;
-}
-
-function endFlight(sim: Sim, reason: "time" | "energy" | "goal"): void {
-  if (sim.mode === "dying" || sim.mode === "done") return;
-  sim.mode = "dying";
-  sim.perchedFlower = -1;
-  sim.endReason = reason;
-  sim.dieT = reason === "energy" ? CONFIG.ending.driftSec : 0.6;
-  sim.events.push({ type: "ended", reason });
+/** Landing height for a given row/lane. For a flower: its species-specific top
+ *  (head center + head radius) plus a small clearance. For an empty lane: just
+ *  above the ground, so the bee visibly dips into the gap. Clamps to valid rows. */
+function landingY(sim: Sim, rowIdx: number, lane: number): number {
+  const r = THREE.MathUtils.clamp(rowIdx, 0, sim.rows.length - 1);
+  const row = sim.rows[r];
+  const idx = row.lanes[lane];
+  if (idx < 0) {
+    return sim.heightAt(laneToX(lane), row.z) + SW.emptyLandHeight;
+  }
+  const f = sim.flowers[idx];
+  const sp = CONFIG.species[f.def.species] ?? CONFIG.species.daisy;
+  const headTop = 0.5 * sp.headScale * f.def.size;
+  return f.pos.y + headTop + SW.landClearance;
 }
 
 export function stepSim(sim: Sim, dt: number, inp: InputState): void {
   sim.t += dt;
   if (sim.mode === "done") return;
 
-  // --- Day timer always runs (the central tradeoff of sipping). ---
-  if (sim.mode !== "dying") {
-    sim.timeLeft -= dt;
-    if (sim.timeLeft <= 0) {
-      sim.timeLeft = 0;
-      endFlight(sim, "time");
-    }
-  }
-
-  sim.skimCooldown = Math.max(0, sim.skimCooldown - dt);
-  sim.takeoffGrace = Math.max(0, sim.takeoffGrace - dt);
-
-  // --- Perched: sip nectar. ---
-  if (sim.mode === "perched") {
-    const f = sim.flowers[sim.perchedFlower];
-    if (inp.flaps > 0) {
-      // Takeoff.
-      inp.flaps = 0;
-      sim.mode = "flying";
-      sim.perchedFlower = -1;
-      sim.sipRate = 0;
-      sim.vel.set(Math.sin(sim.heading), 0, Math.cos(sim.heading))
-        .multiplyScalar(F.baseSpeed * 0.5);
-      sim.vel.y = FL.takeoffImpulse;
-      sim.takeoffGrace = FL.takeoffGraceSec;
-      sim.lastFlapAt = sim.t;
-      sim.events.push({ type: "tookOff" });
-    } else if (f) {
-      // Diminishing returns as the flower drains.
-      const frac = Math.max(0, f.nectarLeft / f.nectarMax);
-      const rate = FL.sipNectarPerSec * Math.pow(frac, FL.diminishExp);
-      const sip = Math.min(rate * dt, f.nectarLeft);
-      if (sip > 0) {
-        f.nectarLeft -= sip;
-        f.dirty = true;
-        sim.nectar += sip;
-        sim.energy = Math.min(sim.energyMax, sim.energy + sip * FL.energyPerNectar);
-        if (f.clusterIdx >= 0) sim.clusters[f.clusterIdx].nectarLeft -= sip;
-        sim.sipRate = rate;
-        // Goal reached: the day's quota is met, end the run in triumph.
-        if (sim.nectar >= sim.nectarGoal) endFlight(sim, "goal");
-      } else {
-        sim.sipRate = 0;
-      }
-      sim.pos.copy(f.pos);
-      sim.vel.set(0, 0, 0);
-    }
+  // --- Timer: the run ends at dusk. ---
+  sim.timeLeft -= dt;
+  if (sim.timeLeft <= 0) {
+    sim.timeLeft = 0;
+    endRun(sim);
     return;
   }
 
-  // --- Flying / dying kinematics. ---
-  const dying = sim.mode === "dying";
-
-  // Steering: hold sustains, release decays.
-  if (!dying) {
-    const target = inp.down ? steerCurve(inp.steerX) : 0;
-    const k = inp.down ? 10 : F.steerReleaseDecay;
-    sim.steer += (target - sim.steer) * Math.min(1, k * dt);
-  } else {
-    sim.steer *= Math.max(0, 1 - 3 * dt);
+  // --- Hop input: one tap = one lane, clamped at the edges. ---
+  if (inp.hop !== 0) {
+    const dir = Math.sign(inp.hop);
+    const next = THREE.MathUtils.clamp(sim.targetLane + dir, 0, SW.lanes - 1);
+    if (next !== sim.targetLane) {
+      sim.targetLane = next;
+      sim.events.push({ type: "hop", dir });
+    }
+    inp.hop = 0;
   }
-  // Screen-right tap (steer > 0) turns right: heading decreases (right of +Z is -X).
-  sim.heading -= sim.steer * F.turnRateMax * dt;
-  const rollTarget = sim.steer * F.bankMaxRoll;
-  sim.roll += (rollTarget - sim.roll) * Math.min(1, 8 * dt);
 
-  // Flaps.
-  if (!dying && inp.flaps > 0) {
-    const n = inp.flaps;
-    inp.flaps = 0;
-    for (let i = 0; i < n; i++) {
-      if (sim.energy <= 0) break;
-      sim.vel.y = Math.min(sim.vel.y + F.flapImpulse, F.maxRiseSpeed);
-      sim.energy -= F.flapEnergyCost;
-      sim.lastFlapAt = sim.t;
-      sim.events.push({ type: "flap" });
+  // --- Jump input: leap forward, up and over the next row. ---
+  if (inp.jump) {
+    inp.jump = false;
+    if (!sim.jump && sim.nextRow + 1 < sim.rows.length) {
+      sim.jump = {
+        startZ: sim.pos.z,
+        endZ: sim.rows[sim.nextRow + 1].z,
+        startY: sim.pos.y,
+        skipRow: sim.nextRow,
+      };
+      sim.events.push({ type: "jump" });
+    }
+  }
+
+  // --- Lateral tween toward the target lane. ---
+  const targetX = laneToX(sim.targetLane);
+  const prevX = sim.laneX;
+  sim.laneX += (targetX - sim.laneX) * Math.min(1, SW.hopLerp * dt);
+  sim.pos.x = sim.laneX;
+
+  // Bank into the hop; ease back to level once settled.
+  const rollTarget = THREE.MathUtils.clamp((targetX - sim.laneX) * 1.4, -SW.leanMax, SW.leanMax);
+  sim.roll += (rollTarget - sim.roll) * Math.min(1, 9 * dt);
+
+  // --- Constant forward motion. ---
+  const prevY = sim.pos.y;
+  sim.pos.z += SW.speed * dt;
+  const lane = nearestLane(sim.laneX);
+  const firstRowZ = sim.rows.length ? sim.rows[0].z : SW.startZ;
+
+  if (sim.jump && sim.pos.z >= sim.jump.endZ) sim.jump = null;
+
+  if (sim.jump) {
+    // A single tall arc that carries the bee over the skipped row and lands on
+    // the one beyond it.
+    const j = sim.jump;
+    const span = Math.max(1e-4, j.endZ - j.startZ);
+    const frac = THREE.MathUtils.clamp((sim.pos.z - j.startZ) / span, 0, 1);
+    const endY = landingY(sim, j.skipRow + 1, lane);
+    sim.pos.y = j.startY + (endY - j.startY) * frac + Math.sin(frac * Math.PI) * SW.jumpArcHeight;
+  } else if (sim.pos.z < firstRowZ) {
+    // Opening: cruise at a constant height out from the hive, then hop up onto
+    // the first flower over the final row-gap.
+    const cruiseY = sim.heightAt(sim.map.hive.x, sim.map.hive.z) + SW.hoverHeight;
+    const hopStartZ = firstRowZ - SW.rowGap;
+    if (sim.pos.z <= hopStartZ) {
+      sim.pos.y = cruiseY;
+    } else {
+      const frac = (sim.pos.z - hopStartZ) / SW.rowGap; // 0 at cruise, 1 at first flower
+      const land0 = landingY(sim, 0, lane);
+      sim.pos.y = cruiseY + (land0 - cruiseY) * frac + Math.sin(frac * Math.PI) * SW.hopArcHeight;
     }
   } else {
-    inp.flaps = 0;
+    // Hop in an arc that lands on each flower's top (which varies by species)
+    // and peaks between rows.
+    const hopPhase = (sim.pos.z - SW.startZ) / SW.rowGap;
+    const rowIdx = Math.floor(hopPhase);
+    const frac = hopPhase - rowIdx; // 0 at the row just landed, 1 at the next
+    // Baseline glides from this row's flower top to the next, so touchdowns meet
+    // the tops exactly; the arc lifts the bee between them.
+    const landHere = landingY(sim, rowIdx, lane);
+    const landNext = landingY(sim, rowIdx + 1, lane);
+    const base = landHere + (landNext - landHere) * frac;
+    sim.pos.y = base + Math.sin(frac * Math.PI) * SW.hopArcHeight;
   }
 
-  // Dive: after the initial flap, keeping the tap held tucks the bee into a
-  // downward dive (steeper and faster than a glide).
-  let diving = false;
-  if (!dying && inp.down) {
-    sim.holdT += dt;
-    if (sim.holdT >= F.diveDelaySec) diving = true;
-  } else {
-    sim.holdT = 0;
-  }
+  // Velocity feeds the Bee's pitch/lean visuals.
+  sim.vel.set(
+    (sim.pos.x - prevX) / Math.max(dt, 1e-4),
+    (sim.pos.y - prevY) / Math.max(dt, 1e-4),
+    SW.speed
+  );
 
-  // Gravity + glide: untapped, the bee settles into a slow descent.
-  sim.vel.y += F.gravity * dt;
-  if (diving) {
-    sim.vel.y -= F.diveAccel * dt;
-    sim.vel.y = Math.max(sim.vel.y, -F.maxDiveSpeed);
-  } else if (!dying) {
-    sim.vel.y = Math.max(sim.vel.y, -F.glideFallSpeed);
-  }
+  // --- Collection: as each row's z-plane passes under the bee, collect the
+  // flower in the bee's current lane and score the chain. ---
+  while (sim.nextRow < sim.rows.length && sim.pos.z >= sim.rows[sim.nextRow].z) {
+    const row = sim.rows[sim.nextRow];
+    sim.nextRow++;
+    const lane = nearestLane(sim.laneX);
 
-  // Forward motion along heading.
-  const speedMult = dying ? 0.3 : 1;
-  const fwd = F.baseSpeed * speedMult;
-  sim.vel.x = Math.sin(sim.heading) * fwd;
-  sim.vel.z = Math.cos(sim.heading) * fwd;
+    // Jumped clean over this row: no collect, no gap penalty.
+    if (sim.jump && sim.nextRow - 1 === sim.jump.skipRow) {
+      continue;
+    }
 
-  sim.pos.addScaledVector(sim.vel, dt);
+    const fIdx = row.lanes[lane];
 
-  // World bounds: soft walls.
-  const b = sim.bounds;
-  if (sim.pos.x < -b.halfX) sim.pos.x = -b.halfX;
-  if (sim.pos.x > b.halfX) sim.pos.x = b.halfX;
-  if (sim.pos.z < 4) sim.pos.z = 4;
-  if (sim.pos.z > b.maxZ) sim.pos.z = b.maxZ;
-
-  // Terrain: soft floor — skim/bounce with a small penalty, never fatal.
-  const ground = sim.heightAt(sim.pos.x, sim.pos.z) + F.minAltitude;
-  if (sim.pos.y < ground) {
-    sim.pos.y = ground;
-    if (dying) {
-      sim.dieT = Math.min(sim.dieT, 0.3);
-    } else if (sim.vel.y < 0) {
-      sim.vel.y = F.terrainSkimBounce;
-      if (sim.skimCooldown <= 0) {
-        sim.energy -= F.terrainSkimEnergyCost;
-        sim.skimCooldown = F.terrainSkimCooldown;
-        sim.events.push({ type: "terrainSkim" });
+    // Empty lane: the bee lands in a gap — the score resets, the chain breaks,
+    // and a chunk of the day is lost.
+    if (fIdx < 0) {
+      sim.score = 0;
+      sim.combo = 0;
+      sim.lastSpecies = null;
+      sim.timeLeft -= SW.missTimePenalty;
+      sim.events.push({ type: "miss" });
+      if (sim.timeLeft <= 0) {
+        sim.timeLeft = 0;
+        endRun(sim);
+        return;
       }
+      continue;
     }
-  }
-  const ceiling = sim.heightAt(sim.pos.x, sim.pos.z) + F.maxAltitude;
-  if (sim.pos.y > ceiling) {
-    sim.pos.y = ceiling;
-    sim.vel.y = Math.min(sim.vel.y, 0);
-  }
 
-  if (dying) {
-    sim.dieT -= dt;
-    if (sim.dieT <= 0) sim.mode = "done";
-    return;
-  }
+    const f = sim.flowers[fIdx];
+    const sp = f.def.species;
 
-  // Passive drain: hovering isn't free.
-  sim.energy -= F.passiveDrainPerSec * dt;
-  if (sim.energy <= 0) {
-    sim.energy = 0;
-    endFlight(sim, "energy");
-    return;
-  }
-
-  // Landing: forgiving proximity snap (landingMaxSpeed defaults above cruise).
-  const speed = sim.vel.length();
-  if (sim.takeoffGrace <= 0 && speed < FL.landingMaxSpeed) {
-    const idx = findLandableFlower(sim);
-    if (idx >= 0) {
-      const f = sim.flowers[idx];
-      sim.mode = "perched";
-      sim.perchedFlower = idx;
-      sim.pos.copy(f.pos);
-      sim.vel.set(0, 0, 0);
-      sim.steer = 0;
-      sim.events.push({ type: "landed", flowerIdx: idx });
-      if (!f.pollinated) {
-        f.pollinated = true;
-        f.dirty = true;
-        sim.pollinatedThisRun++;
-        sim.events.push({ type: "pollinated", flowerIdx: idx });
-      }
+    const matched = sim.lastSpecies !== null && sp === sim.lastSpecies;
+    if (matched) {
+      sim.combo++;
+      sim.score += SW.matchPoints * sim.combo;
+    } else {
+      sim.combo = 1;
+      sim.score += SW.basePoints;
     }
+    sim.bestCombo = Math.max(sim.bestCombo, sim.combo);
+    sim.lastSpecies = sp;
+
+    // Mark collected for the wilt/darken render feedback.
+    f.pollinated = true;
+    f.nectarLeft = 0;
+    f.dirty = true;
+
+    sim.events.push({ type: "collect", flowerIdx: fIdx, matched, combo: sim.combo });
   }
+
+  // Ran out of rows before the timer — end the run.
+  if (sim.nextRow >= sim.rows.length) endRun(sim);
+}
+
+function endRun(sim: Sim): void {
+  if (sim.mode === "done") return;
+  sim.mode = "done";
+  sim.endReason = "time";
+  sim.events.push({ type: "ended", reason: "time" });
 }
