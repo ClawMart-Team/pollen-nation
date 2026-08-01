@@ -1,61 +1,103 @@
 /**
- * Touch input for Small World, kept outside React. A tap on the left half of
- * the screen hops the bee one lane left; a tap on the right half hops one lane
- * right. One tap = one lane.
+ * Touch input for Small World, kept outside React. Designed for one-handed play:
+ *  • Touching the screen makes the bee dive down onto the flower it is passing.
+ *  • Keeping the finger down and sliding left/right hops the bee between lanes —
+ *    one lane per slide step, so a longer slide crosses several lanes.
+ * Desktop mirrors this with the arrow keys (left/right hop) and space / down to
+ * dive.
  */
 export interface InputState {
-  /** Pending hop since the last sim step: -1 (left), +1 (right), 0 (none). */
+  /** Pending lane hops since the last sim step. Positive = screen-left,
+   *  negative = screen-right. One hop is consumed per step. */
   hop: number;
-  /** Pending forward jump (leap over the next row). */
-  jump: boolean;
+  /** Pending dive (drop onto the flower to pollinate it). */
+  dive: boolean;
 }
 
-export const input: InputState = { hop: 0, jump: false };
+export const input: InputState = { hop: 0, dive: false };
 
 export function resetInput(): void {
   input.hop = 0;
-  input.jump = false;
+  input.dive = false;
+}
+
+/** Queue a lane hop, keeping the buffer bounded so a wild slide can't stack up. */
+function queueHop(dir: number): void {
+  input.hop = Math.max(-2, Math.min(2, input.hop + dir));
 }
 
 export function bindInput(el: HTMLElement): () => void {
+  let activeId: number | null = null;
+  let refX = 0;
+
   const onDown = (e: PointerEvent) => {
+    if (activeId !== null) return; // ignore extra fingers
     e.preventDefault();
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    // Jump zones: the top of the screen, or the middle of the bottom (thumb-
-    // friendly on mobile) — both leap forward over a row.
-    if (e.clientY < h * 0.22) {
-      input.jump = true;
-      return;
+    activeId = e.pointerId;
+    refX = e.clientX;
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      /* capture unsupported — ignore */
     }
-    if (e.clientY > h * 0.7 && e.clientX > w / 3 && e.clientX < (2 * w) / 3) {
-      input.jump = true;
-      return;
-    }
-    // Camera looks along +Z, so world +X is on the screen's left. Tapping the
-    // left half should hop toward screen-left (increasing lane/X), and vice
-    // versa, so the bee moves toward the tapped side.
-    input.hop = e.clientX < w / 2 ? 1 : -1;
+    // A touch = a dive onto the flower the bee is over.
+    input.dive = true;
   };
-  // Desktop: arrow keys hop toward the pressed direction (left = screen-left);
-  // up arrow jumps forward over a row.
+
+  const onMove = (e: PointerEvent) => {
+    if (e.pointerId !== activeId) return;
+    // One lane per this fraction of the screen width slid horizontally.
+    const step = window.innerWidth * 0.11;
+    let dx = e.clientX - refX;
+    // Sliding right moves the bee screen-right (hop -1); left moves it
+    // screen-left (hop +1). Advance the reference each step so a long slide
+    // keeps issuing hops.
+    while (dx >= step) {
+      queueHop(-1);
+      refX += step;
+      dx -= step;
+    }
+    while (dx <= -step) {
+      queueHop(1);
+      refX -= step;
+      dx += step;
+    }
+  };
+
+  const onUp = (e: PointerEvent) => {
+    if (e.pointerId !== activeId) return;
+    activeId = null;
+    try {
+      el.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+  };
+
   const onKey = (e: KeyboardEvent) => {
     if (e.repeat) return;
     if (e.key === "ArrowLeft") {
-      input.hop = 1;
+      queueHop(1);
     } else if (e.key === "ArrowRight") {
-      input.hop = -1;
-    } else if (e.key === "ArrowUp") {
-      input.jump = true;
+      queueHop(-1);
+    } else if (e.key === " " || e.key === "ArrowDown" || e.key === "Spacebar") {
+      input.dive = true;
     } else {
       return;
     }
     e.preventDefault();
   };
+
   el.addEventListener("pointerdown", onDown);
+  el.addEventListener("pointermove", onMove);
+  el.addEventListener("pointerup", onUp);
+  el.addEventListener("pointercancel", onUp);
   window.addEventListener("keydown", onKey);
   return () => {
     el.removeEventListener("pointerdown", onDown);
+    el.removeEventListener("pointermove", onMove);
+    el.removeEventListener("pointerup", onUp);
+    el.removeEventListener("pointercancel", onUp);
     window.removeEventListener("keydown", onKey);
   };
 }

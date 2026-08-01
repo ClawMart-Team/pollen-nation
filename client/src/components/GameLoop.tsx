@@ -96,11 +96,17 @@ export function GameLoop({ sim }: { sim: Sim }) {
             audio.onFlap();
             buzz(10);
             break;
-          case "jump":
-            // Leaping over a row: a brighter flap and a punchier buzz.
+          case "dive":
+            // Dropping onto a flower: a quick flap and a soft buzz.
             audio.onFlap();
-            juiceBus.flash("#bfe6ff", 0.22);
-            buzz(24);
+            buzz(14);
+            break;
+          case "miss":
+            // Dived into a gap: a dull thud, a red flash and a hard buzz as the
+            // chain breaks and a little daylight is lost.
+            audio.onLand();
+            juiceBus.flash("#ff5a5a", 0.3);
+            buzz(30);
             break;
           case "turn":
             // Mid-day turn-around: the bee spins for home. Bright flash + buzz.
