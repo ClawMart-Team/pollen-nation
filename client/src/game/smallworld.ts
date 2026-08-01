@@ -36,6 +36,9 @@ export const SW = {
   cruiseHeight: 3.4,
   /** How long a dive dip (down onto the flower and back to cruise) takes (s). */
   diveDuration: 0.34,
+  /** How fast the bee eases between the fly-over cruise and the low hop line
+   *  when the finger is pressed or released (1/s). */
+  diveLerp: 12,
   /** Z distance from a row within which a dive lands on that row's flower (m).
    *  The bee must be roughly above a bloom to pollinate it. */
   collectWindow: 2.6,

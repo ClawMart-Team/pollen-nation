@@ -82,8 +82,12 @@ export interface Sim {
    *  the bee laterally into a lane that has flowers on the first return rows so
    *  it never drops into a gap the instant the turn completes. */
   turn: { t: number; y0: number; x0: number; xLane: number } | null;
-  /** Active dive dip (drop onto a flower and back to cruise), or null. */
-  dive: { t: number; depth: number } | null;
+  /** Whether the bee is currently in hop mode (finger held): it skims the
+   *  flowers and pollinates each row it crosses. Released → climbs to fly-over. */
+  diving: boolean;
+  /** Smoothed 0..1 blend between the fly-over cruise (0) and the low hop line
+   *  (1). Eased toward `diving`. */
+  lowT: number;
 
   flowers: RuntimeFlower[];
   rows: Row[];
@@ -155,7 +159,8 @@ export function createSim(map: MapData): Sim {
     travelDir: 1,
     retRow: -1,
     turn: null,
-    dive: null,
+    diving: false,
+    lowT: 0,
     flowers,
     rows,
     clusters: [],
@@ -185,7 +190,8 @@ export function resetToStart(sim: Sim): void {
   sim.travelDir = 1;
   sim.retRow = -1;
   sim.turn = null;
-  sim.dive = null;
+  sim.diving = false;
+  sim.lowT = 0;
   sim.endReason = null;
   sim.events.length = 0;
 }
@@ -247,47 +253,57 @@ function collectFlower(sim: Sim, fIdx: number): void {
   sim.events.push({ type: "collect", flowerIdx: fIdx, matched, combo: sim.combo, points: gained });
 }
 
-/** Handle a dive: drop onto whatever the bee is passing over. If it is above a
- *  fresh flower in its lane, pollinate it; onto a gap it is a miss that breaks
- *  the chain and costs a little daylight; between rows it is a harmless feint. */
-function tryDive(sim: Sim): void {
-  const cruiseY = sim.heightAt(sim.pos.x, sim.pos.z) + SW.cruiseHeight;
-  const nearRow = THREE.MathUtils.clamp(
-    Math.round((sim.pos.z - SW.startZ) / SW.rowGap),
-    0,
-    sim.rows.length - 1
-  );
-  const row = sim.rows[nearRow];
-
-  // Not close enough to a row to reach a bloom: a shallow feint, no effect.
-  if (!row || Math.abs(sim.pos.z - row.z) > SW.collectWindow) {
-    sim.dive = { t: 0, depth: 1.0 };
-    sim.events.push({ type: "dive" });
-    return;
+/** Top of a flower/gap in the given row+lane the bee skims at in hop mode. For a
+ *  flower it is the bloom top plus a little clearance; for a gap it is just above
+ *  the grass so the bee visibly dips into it. Clamps to valid rows. */
+function laneTopY(sim: Sim, rowIdx: number, lane: number): number {
+  const r = THREE.MathUtils.clamp(rowIdx, 0, sim.rows.length - 1);
+  const idx = sim.rows[r].lanes[lane];
+  if (idx < 0) {
+    return sim.heightAt(laneToX(lane), sim.rows[r].z) + SW.emptyLandHeight;
   }
+  return flowerTopY(sim.flowers[idx]) + SW.landClearance;
+}
 
-  const lane = nearestLane(sim.laneX);
-  const fIdx = row.lanes[lane];
+/** The low "hop line" the bee rides when diving: a glide between the current and
+ *  next row's flower tops in its lane, so it sits down among the blooms. */
+function hopBaselineY(sim: Sim, lane: number): number {
+  const hopPhase = (sim.pos.z - SW.startZ) / SW.rowGap;
+  const rowIdx = Math.floor(hopPhase);
+  const frac = THREE.MathUtils.clamp(hopPhase - rowIdx, 0, 1);
+  const here = laneTopY(sim, rowIdx, lane);
+  const next = laneTopY(sim, rowIdx + 1, lane);
+  return here + (next - here) * frac;
+}
 
-  // Dived into a gap: break the chain and lose a little daylight.
+/** While in hop mode, pollinate the row whose z-plane the bee crossed this step
+ *  (if any). A fresh flower scores; a gap breaks the chain and costs a little
+ *  daylight — so the player lifts off to sail over gaps. */
+function collectCrossings(sim: Sim, prevZ: number, lane: number): void {
+  if (!sim.diving) return;
+  const len = sim.rows.length;
+  let i: number;
+  if (sim.travelDir === 1) {
+    i = Math.floor((sim.pos.z - SW.startZ) / SW.rowGap);
+    if (i < 0 || i >= len) return;
+    const rz = sim.rows[i].z;
+    if (!(rz > prevZ && rz <= sim.pos.z)) return;
+  } else {
+    i = Math.ceil((sim.pos.z - SW.startZ) / SW.rowGap);
+    if (i < 0 || i >= len) return;
+    const rz = sim.rows[i].z;
+    if (!(rz < prevZ && rz >= sim.pos.z)) return;
+  }
+  const fIdx = sim.rows[i].lanes[lane];
   if (fIdx < 0) {
+    // Skimmed low over a gap: no bloom to pollinate, so the chain breaks. The
+    // player's incentive is to lift off and sail over gaps to keep the combo.
     sim.combo = 0;
     sim.lastSpecies = null;
-    sim.timeLeft = Math.max(0, sim.timeLeft - SW.missTimePenalty);
-    const groundY = sim.heightAt(laneToX(lane), row.z);
-    sim.dive = { t: 0, depth: Math.max(1.0, cruiseY - (groundY + SW.emptyLandHeight)) };
     sim.events.push({ type: "miss" });
     return;
   }
-
-  const f = sim.flowers[fIdx];
-  if (!f.pollinated) {
-    collectFlower(sim, fIdx);
-  } else {
-    // Already spent this bloom: still dip, but no score.
-    sim.events.push({ type: "dive" });
-  }
-  sim.dive = { t: 0, depth: Math.max(0.5, cruiseY - flowerTopY(f)) };
+  if (!sim.flowers[fIdx].pollinated) collectFlower(sim, fIdx);
 }
 
 export function stepSim(sim: Sim, dt: number, inp: InputState): void {
@@ -321,7 +337,7 @@ export function stepSim(sim: Sim, dt: number, inp: InputState): void {
     const safeLane = pickReturnLane(sim, sim.retRow, nearestLane(sim.laneX));
     sim.targetLane = safeLane;
     sim.turn = { t: 0, y0: sim.pos.y, x0: sim.laneX, xLane: laneToX(safeLane) };
-    sim.dive = null;
+    sim.diving = false;
     sim.events.push({ type: "turn" });
   }
 
@@ -353,6 +369,13 @@ export function stepSim(sim: Sim, dt: number, inp: InputState): void {
     return;
   }
 
+  // --- Dive mode is held: reflect the finger/dive-key state. A press drops the
+  // bee into hop mode down among the flowers; releasing climbs it back to the
+  // fly-over cruise. The transition down is announced once for a flap/buzz. ---
+  const wasDiving = sim.diving;
+  sim.diving = inp.diving;
+  if (sim.diving && !wasDiving) sim.events.push({ type: "dive" });
+
   // --- Slide-to-hop: each queued hop moves the bee one lane, clamped at the
   // edges. On the return leg the camera faces the other way, so flip the input
   // to keep left/right relative to the bee's travel direction. One hop is
@@ -365,14 +388,6 @@ export function stepSim(sim: Sim, dt: number, inp: InputState): void {
       sim.events.push({ type: "hop", dir });
     }
     inp.hop -= Math.sign(inp.hop);
-  }
-
-  // --- Dive: a touch drops the bee onto the flower it is passing over to
-  // pollinate it (see tryDive). The bee no longer auto-collects — soaring above
-  // the rows is safe and scoreless. ---
-  if (inp.dive) {
-    inp.dive = false;
-    tryDive(sim);
   }
 
   // --- Lateral tween toward the target lane. ---
@@ -390,22 +405,17 @@ export function stepSim(sim: Sim, dt: number, inp: InputState): void {
   const prevZ = sim.pos.z;
   const moveSpeed = SW.speed * (sim.travelDir === -1 ? SW.returnSpeedMult : 1);
   sim.pos.z += moveSpeed * sim.travelDir * dt;
+  const lane = nearestLane(sim.laneX);
 
-  // --- Vertical: soar high above the flowers by default; an active dive dips
-  // the bee down onto the bloom and back up to cruise. ---
+  // --- Pollinate the row just crossed while in hop mode. ---
+  collectCrossings(sim, prevZ, lane);
+
+  // --- Vertical: soar high above the flowers by default; while diving, ease
+  // down onto the hop line among the blooms and ride it until released. ---
   const cruiseY = sim.heightAt(sim.pos.x, sim.pos.z) + SW.cruiseHeight;
-  if (sim.dive) {
-    sim.dive.t += dt;
-    const k = sim.dive.t / SW.diveDuration;
-    if (k >= 1) {
-      sim.dive = null;
-      sim.pos.y = cruiseY;
-    } else {
-      sim.pos.y = cruiseY - sim.dive.depth * Math.sin(k * Math.PI);
-    }
-  } else {
-    sim.pos.y = cruiseY;
-  }
+  const lowY = hopBaselineY(sim, lane);
+  sim.lowT += ((sim.diving ? 1 : 0) - sim.lowT) * Math.min(1, SW.diveLerp * dt);
+  sim.pos.y = cruiseY + (lowY - cruiseY) * sim.lowT;
 
   // Velocity feeds the Bee's pitch/lean visuals.
   sim.vel.set(
