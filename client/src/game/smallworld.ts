@@ -31,9 +31,9 @@ export const SW = {
   /** Hover clearance kept above the terrain (m). */
   hoverHeight: 2.2,
   /** Cruise height the bee flies at above the terrain (m). The default action is
-   *  to soar clearly above the flowers; a dive is needed to pollinate one. Kept
-   *  above the tallest bloom top so nothing is clipped. */
-  cruiseHeight: 3.4,
+   *  to soar clearly above the flowers — and above the hop arcs — so fly-over is
+   *  visibly distinct from hop mode. */
+  cruiseHeight: 4.6,
   /** How long a dive dip (down onto the flower and back to cruise) takes (s). */
   diveDuration: 0.34,
   /** How fast the bee eases between the fly-over cruise and the low hop line
@@ -42,8 +42,9 @@ export const SW = {
   /** Z distance from a row within which a dive lands on that row's flower (m).
    *  The bee must be roughly above a bloom to pollinate it. */
   collectWindow: 2.6,
-  /** Peak extra height of the hop arc between rows (m). */
-  hopArcHeight: 1.6,
+  /** Peak extra height of the hop arc between rows (m). Kept below the fly-over
+   *  cruise so a hop never rises to the soar height. */
+  hopArcHeight: 1.4,
   /** Peak extra height of a forward jump arc over a row (m). */
   jumpArcHeight: 3.4,
   /** Gap kept between the bee and the flower top at each landing (m). */

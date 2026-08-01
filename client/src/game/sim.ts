@@ -265,15 +265,18 @@ function laneTopY(sim: Sim, rowIdx: number, lane: number): number {
   return flowerTopY(sim.flowers[idx]) + SW.landClearance;
 }
 
-/** The low "hop line" the bee rides when diving: a glide between the current and
- *  next row's flower tops in its lane, so it sits down among the blooms. */
+/** The low "hop line" the bee rides when in hop mode: it arcs up off one row's
+ *  flower and touches down on the next, hopping bloom to bloom (distinct from the
+ *  flat fly-over cruise). Touchdowns land on the flower tops; the arc peaks
+ *  midway between rows. */
 function hopBaselineY(sim: Sim, lane: number): number {
   const hopPhase = (sim.pos.z - SW.startZ) / SW.rowGap;
   const rowIdx = Math.floor(hopPhase);
   const frac = THREE.MathUtils.clamp(hopPhase - rowIdx, 0, 1);
   const here = laneTopY(sim, rowIdx, lane);
   const next = laneTopY(sim, rowIdx + 1, lane);
-  return here + (next - here) * frac;
+  const base = here + (next - here) * frac;
+  return base + Math.sin(frac * Math.PI) * SW.hopArcHeight;
 }
 
 /** While in hop mode, pollinate the row whose z-plane the bee crossed this step
